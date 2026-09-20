@@ -734,6 +734,73 @@ input[type=range] {
   border-color: #4a4a4a;
 }
 
+/* Center Top Navigation Tabs */
+.nav-tabs-center {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 4px;
+  border-radius: 999px;
+  margin: 0 auto;
+}
+
+.nav-tab-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--t2);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  white-space: nowrap;
+}
+
+.nav-tab-pill:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-tab-pill.active {
+  background: var(--fill);
+  color: var(--fill-ink);
+  border-color: var(--fill);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .nav-tabs-center {
+  background: #f4fbf6;
+  border-color: #c6d9cd;
+}
+
+[data-theme="light"] .nav-tab-pill {
+  color: #476a52;
+}
+
+[data-theme="light"] .nav-tab-pill:hover {
+  color: #166534;
+  background: #e9f7ee;
+}
+
+[data-theme="light"] .nav-tab-pill.active {
+  background: #166534;
+  color: #ffffff;
+  border-color: #166534;
+}
+
+@media (max-width: 990px) {
+  .nav-tabs-center {
+    display: none;
+  }
+}
+
 @media (max-width: 900px) {
   .nm.hide-m {
     display: none;
@@ -761,6 +828,26 @@ input[type=range] {
 .view.active {
   display: block;
   animation: enter 0.3s ease;
+}
+
+/* Full-Width & Vertically Expanded Views (Bringe Study & Study Path) */
+.view.full-width-view,
+#view-bringe.view,
+#view-path.view {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  flex: 1 1 0%;
+  display: none;
+  flex-direction: column;
+  min-height: calc(100vh - 65px);
+}
+
+.view.full-width-view.active,
+#view-bringe.view.active,
+#view-path.view.active {
+  display: flex !important;
 }
 
 .vh {
@@ -2223,19 +2310,109 @@ button.dwrow:hover {
   width: 100%;
   max-width: 100%;
   margin: 0;
-  padding: 16px 36px 80px;
+  padding: 24px 44px 100px;
   box-sizing: border-box;
+  flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 65px);
+}
+
+/* Path Overview Roadmap Banner */
+.path-overview-banner {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 28px;
+  margin-bottom: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.path-overview-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.path-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .path-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 500px) {
+  .path-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.path-metric-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.path-metric-val {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.path-metric-lbl {
+  font-size: 11.5px;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 600;
+}
+
+.path-progress-bar-wrap {
+  width: 100%;
+  height: 8px;
+  background: var(--surface2);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.path-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #22c55e);
+  border-radius: 999px;
+  transition: width 0.4s ease;
 }
 
 .stage-card {
   position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 28px 32px;
-  margin-bottom: 26px;
+  border-radius: 14px;
+  padding: 26px 30px;
+  margin-bottom: 20px;
   overflow: hidden;
-  transition: all 0.25s ease;
+  transition: all 0.22s ease;
+}
+
+.stage-card:hover:not(.locked) {
+  border-color: var(--border-2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
 .stage-card.unlocked {
@@ -2244,6 +2421,7 @@ button.dwrow:hover {
 
 .stage-card.completed {
   border-color: #384838;
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.04) 0%, var(--surface) 100%);
 }
 
 /* Smoke & Fog concealment layer for locked stages */
@@ -2368,8 +2546,12 @@ button.dwrow:hover {
   width: 100%;
   max-width: 100%;
   margin: 0;
-  padding: 16px 36px 80px;
+  padding: 24px 44px 100px;
   box-sizing: border-box;
+  flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 65px);
 }
 
 /* ============ STAGE 03 TOP COMMAND TILES ============ */

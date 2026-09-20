@@ -375,33 +375,71 @@ export const GamifiedStudyPath: React.FC<GamifiedStudyPathProps> = ({
     );
   }
 
+  const completedCount = stages.filter((s) => s.status === "completed").length;
+  const unlockedCount = stages.filter((s) => s.status === "unlocked").length;
+  const lockedCount = stages.filter((s) => s.status === "locked").length;
+  const totalXpEarnable = stages.reduce((acc, s) => acc + s.xp, 0);
+  const progressPercent = Math.round((completedCount / stages.length) * 100);
+
   return (
-    <div className="gamified-map-wrap" style={{ paddingTop: "16px" }}>
-      {/* Header */}
-      <div style={{ marginBottom: "22px" }}>
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "8px",
-            padding: "5px 12px",
-            background: "var(--surface2)",
-            border: "1px solid var(--border)",
-            borderRadius: "4px",
-            fontSize: "12px",
-            color: "var(--t2)",
-            textTransform: "uppercase",
-            letterSpacing: "1px",
-            marginBottom: "8px",
-          }}
-        >
-          <Compass size={14} />
-          <span>Gamified Stepping-Stone Progression</span>
+    <div className="gamified-map-wrap">
+      {/* Roadmap Overview Metrics Banner */}
+      <div className="path-overview-banner">
+        <div className="path-overview-top">
+          <div>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "4px 10px",
+                background: "var(--surface2)",
+                border: "1px solid var(--border)",
+                borderRadius: "4px",
+                fontSize: "11.5px",
+                color: "var(--t2)",
+                textTransform: "uppercase",
+                letterSpacing: "1px",
+                marginBottom: "6px",
+              }}
+            >
+              <Compass size={13} />
+              <span>Gamified Adaptive Curriculum</span>
+            </div>
+            <h1 style={{ fontFamily: "var(--serif)", fontSize: "28px", fontWeight: 500, margin: 0, color: "var(--text)" }}>
+              {topicTitle} · Stepping-Stone Progression
+            </h1>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "13px", color: "var(--t3)", fontFamily: "var(--mono)" }}>
+              {completedCount} of {stages.length} Milestones Conquered ({progressPercent}%)
+            </span>
+          </div>
         </div>
 
-        <h1 style={{ fontFamily: "var(--serif)", fontSize: "30px", fontWeight: 500, margin: "0 0 12px" }}>
-          Adaptive Study Path · {topicTitle}
-        </h1>
+        <div className="path-progress-bar-wrap">
+          <div className="path-progress-bar-fill" style={{ width: `${progressPercent}%` }} />
+        </div>
+
+        <div className="path-metrics-grid">
+          <div className="path-metric-card">
+            <span className="path-metric-val">{stages.length}</span>
+            <span className="path-metric-lbl">Total Milestones</span>
+          </div>
+          <div className="path-metric-card">
+            <span className="path-metric-val" style={{ color: "var(--accent-green)" }}>{completedCount}</span>
+            <span className="path-metric-lbl">Conquered Stages</span>
+          </div>
+          <div className="path-metric-card">
+            <span className="path-metric-val" style={{ color: "#60a5fa" }}>{lockedCount}</span>
+            <span className="path-metric-lbl">Veiled in Cloud</span>
+          </div>
+          <div className="path-metric-card">
+            <span className="path-metric-val" style={{ color: "#f59e0b" }}>+{totalXpEarnable} XP</span>
+            <span className="path-metric-lbl">Total Mastery XP</span>
+          </div>
+        </div>
       </div>
 
       {/* Stepping Stones Cards */}
@@ -423,36 +461,57 @@ export const GamifiedStudyPath: React.FC<GamifiedStudyPathProps> = ({
             >
               {/* Content of the stage */}
               <div style={{ position: "relative", zIndex: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                    <span
-                      style={{
-                        fontFamily: "var(--serif)",
-                        fontSize: "21px",
-                        color: isCompleted ? "var(--text)" : "var(--t3)",
-                        fontWeight: 600,
-                      }}
-                    >
-                      0{stage.id}
-                    </span>
-                    <span style={{ fontSize: "12px", color: "var(--t4)", textTransform: "uppercase", letterSpacing: "1px" }}>
-                      {stage.category}
-                    </span>
-                    {stage.difficulty === "hard" && (
-                      <span style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "4px", background: "#251c1c", color: "#f28b82", border: "1px solid #4a2424" }}>
-                        Adaptive Challenge (+35 XP)
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", flexWrap: "wrap", gap: "12px" }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                      <span
+                        style={{
+                          fontFamily: "var(--mono)",
+                          fontSize: "13px",
+                          background: "var(--surface2)",
+                          border: "1px solid var(--border)",
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          color: isCompleted ? "var(--accent-green)" : "var(--text)",
+                          fontWeight: 600,
+                        }}
+                      >
+                        STAGE 0{stage.id}
                       </span>
-                    )}
+                      <span style={{ fontSize: "12px", color: "var(--t3)", textTransform: "uppercase", letterSpacing: "1px", fontWeight: 600 }}>
+                        {stage.category}
+                      </span>
+                      {stage.difficulty === "hard" && (
+                        <span style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "4px", background: "rgba(239, 68, 68, 0.12)", color: "#f87171", border: "1px solid rgba(239, 68, 68, 0.3)" }}>
+                          Adaptive Challenge (+35 XP)
+                        </span>
+                      )}
+                    </div>
+                    <h3 style={{ fontSize: "20px", fontWeight: 600, margin: "0", color: "var(--text)", lineHeight: "1.4" }}>
+                      {stage.title}
+                    </h3>
                   </div>
 
-                  <span style={{ fontSize: "13.5px", color: "var(--t4)" }}>
-                    {stage.mins} min · +{stage.xp} XP
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "13.5px", color: "var(--t2)", fontFamily: "var(--mono)" }}>
+                      {stage.mins} min &bull; +{stage.xp} XP
+                    </span>
+                    {isUnlocked && (
+                      <button
+                        type="button"
+                        className="bringe-primary-btn"
+                        style={{ padding: "8px 16px", fontSize: "13px" }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenStage(stage);
+                        }}
+                      >
+                        <span>Start Mission</span>
+                        <ArrowRight size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
-
-                <h3 style={{ fontSize: "19px", fontWeight: 550, margin: "0 0 8px", color: "var(--text)", lineHeight: "1.4" }}>
-                  {stage.title}
-                </h3>
 
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "14px" }}>
                   {stage.concepts.map((concept, ci) => (
@@ -460,10 +519,10 @@ export const GamifiedStudyPath: React.FC<GamifiedStudyPathProps> = ({
                       key={ci}
                       style={{
                         fontSize: "13px",
-                        padding: "4px 10px",
-                        background: "#181818",
+                        padding: "4px 11px",
+                        background: "var(--surface2)",
                         border: "1px solid var(--border)",
-                        borderRadius: "4px",
+                        borderRadius: "6px",
                         color: "var(--t2)",
                       }}
                     >
@@ -473,9 +532,9 @@ export const GamifiedStudyPath: React.FC<GamifiedStudyPathProps> = ({
                 </div>
 
                 {isCompleted && (
-                  <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px", color: "var(--t2)" }}>
-                    <CheckCircle2 size={16} style={{ color: "var(--fill)" }} />
-                    <span>Conquered · Fog dissolved on next milestone</span>
+                  <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px", color: "var(--accent-green)", fontWeight: 500 }}>
+                    <CheckCircle2 size={16} />
+                    <span>Conquered &bull; Fog dissolved on next milestone</span>
                   </div>
                 )}
               </div>

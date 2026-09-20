@@ -7,6 +7,7 @@ import { GamifiedStudyPath } from "@/components/study-path/GamifiedStudyPath";
 import { ShareInformationView } from "@/components/community/ShareInformationView";
 import { BringeStudyRescue } from "@/components/bringe/BringeStudyRescue";
 import { getStoredTheme, setStoredTheme } from "@/lib/grasping-service";
+import { Sparkles, Zap, Route, Share2, Settings } from "lucide-react";
 
 /* ============ TYPES ============ */
 interface AuthUser {
@@ -1152,7 +1153,7 @@ export default function App() {
 
         {/* Main Content Area */}
         <div className="main-content-area">
-          {/* Top Bar with Minimal Header */}
+          {/* Top Bar with Standard Header */}
           <header className="topnav" style={{ position: "sticky", top: 0, zIndex: 40 }}>
             <div className="nav-in">
               <div
@@ -1163,6 +1164,50 @@ export default function App() {
                 <img src="/logo.png" alt="Sarvajña" style={{ height: "22px", width: "auto", objectFit: "contain", borderRadius: "4px" }} />
                 <b>Sarvajña</b>
               </div>
+
+              {/* Standard Center Top Navigation Tabs */}
+              <nav className="nav-tabs-center" aria-label="Main Views">
+                <button
+                  type="button"
+                  className={`nav-tab-pill ${state.view === "main" ? "active" : ""}`}
+                  onClick={() => saveState({ ...state, view: "main" })}
+                >
+                  <Sparkles size={14} />
+                  <span>AI Research</span>
+                </button>
+                <button
+                  type="button"
+                  className={`nav-tab-pill ${state.view === "bringe" ? "active" : ""}`}
+                  onClick={() => saveState({ ...state, view: "bringe" })}
+                >
+                  <Zap size={14} />
+                  <span>Bringe Study</span>
+                </button>
+                <button
+                  type="button"
+                  className={`nav-tab-pill ${state.view === "path" ? "active" : ""}`}
+                  onClick={() => saveState({ ...state, view: "path" })}
+                >
+                  <Route size={14} />
+                  <span>Study Path</span>
+                </button>
+                <button
+                  type="button"
+                  className={`nav-tab-pill ${state.view === "share" ? "active" : ""}`}
+                  onClick={() => saveState({ ...state, view: "share" })}
+                >
+                  <Share2 size={14} />
+                  <span>Community</span>
+                </button>
+                <button
+                  type="button"
+                  className={`nav-tab-pill ${state.view === "settings" ? "active" : ""}`}
+                  onClick={() => saveState({ ...state, view: "settings" })}
+                >
+                  <Settings size={14} />
+                  <span>Settings</span>
+                </button>
+              </nav>
 
               <div className="nav-meta" style={{ marginLeft: "auto" }}>
                 <span className="nm hide-m">
@@ -1196,7 +1241,7 @@ export default function App() {
 
             {/* 2. BRINGE STUDY VIEW (Exam-Eve Rescue & Last Resort Engine) */}
             {state.view === "bringe" && (
-              <section className="view active" id="view-bringe" style={{ padding: "0" }}>
+              <section className="view active full-width-view" id="view-bringe">
                 <BringeStudyRescue
                   onGainXP={handleGainXP}
                   onOpenRescueSheet={() => setSheetOpen(true)}
@@ -1209,7 +1254,7 @@ export default function App() {
 
             {/* 3. STUDY PATH (Gamified Fog-Concealed Adaptive Progression) */}
             {state.view === "path" && (
-              <section className="view active" id="view-path" style={{ padding: "0" }}>
+              <section className="view active full-width-view" id="view-path">
                 <GamifiedStudyPath
                   topicTitle={state.course}
                   onGainXP={handleGainXP}

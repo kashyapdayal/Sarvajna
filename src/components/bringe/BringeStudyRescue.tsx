@@ -2228,7 +2228,7 @@ export const BringeStudyRescue: React.FC<BringeStudyRescueProps> = ({
 
                 {/* --- Sub-Mode 1: FLASHCARDS --- */}
                 {stage3PracticeMode === "flashcards" && (
-                  <div style={{ maxWidth: "680px", margin: "0 auto" }}>
+                  <div style={{ maxWidth: "1020px", margin: "0 auto", width: "100%" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                       <span style={{ fontSize: "13px", color: "var(--t3)", fontFamily: "var(--mono)" }}>
                         CARD {stage3FlashcardIdx + 1} OF {currentPracticeTopic.flashcards.length}
@@ -2294,7 +2294,7 @@ export const BringeStudyRescue: React.FC<BringeStudyRescueProps> = ({
 
                 {/* --- Sub-Mode 2: MCQ DIAGNOSTIC --- */}
                 {stage3PracticeMode === "mcq" && (
-                  <div className="mcq-module-card" style={{ maxWidth: "740px", margin: "0 auto" }}>
+                  <div className="mcq-module-card" style={{ maxWidth: "1020px", margin: "0 auto", width: "100%" }}>
                     <div style={{ fontSize: "13px", color: "var(--t3)", fontFamily: "var(--mono)", marginBottom: "10px" }}>
                       DIAGNOSTIC MCQ · {currentPracticeTopic.name}
                     </div>
@@ -2406,7 +2406,7 @@ export const BringeStudyRescue: React.FC<BringeStudyRescueProps> = ({
 
                 {/* --- Sub-Mode 3: DESCRIPTIVE WRITTEN TEST (AI Evaluated) --- */}
                 {stage3PracticeMode === "written" && (
-                  <div style={{ maxWidth: "800px", margin: "0 auto" }}>
+                  <div style={{ maxWidth: "1020px", margin: "0 auto", width: "100%" }}>
                     <div
                       style={{
                         background: "var(--surface2)",
