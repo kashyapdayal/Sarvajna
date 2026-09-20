@@ -162,9 +162,7 @@ https://sarvajna-alpha.vercel.app/
 
 ### Demo / Pitch Video
 
-**Coming soon**
-
-`https://your-video-link.example`
+https://drive.google.com/drive/folders/12Z5ANtNAOyYQEXohX_N14AgOG00QQBLQ?usp=sharing
 
 ## What Makes Sarvajña Different?
 
