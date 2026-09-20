@@ -156,11 +156,9 @@ http://localhost:3000
 
 ## Demo
 
-### Live Demo
+### Live
 
-**Coming soon**
-
-`https://your-deployment-url.example`
+https://sarvajna-alpha.vercel.app/
 
 ### Demo / Pitch Video
 
