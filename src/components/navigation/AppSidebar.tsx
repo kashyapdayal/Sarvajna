@@ -21,6 +21,7 @@ interface AppSidebarProps {
   onToggleCollapse: () => void;
   level: number;
   xp: number;
+  onOpenPanicMode?: () => void;
 }
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({
@@ -30,6 +31,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   onToggleCollapse,
   level,
   xp,
+  onOpenPanicMode,
 }) => {
   const navItems = [
     {
@@ -109,16 +111,62 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         })}
       </nav>
 
-      <div className="sidebar-footer">
+      <div className="sidebar-footer" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         {!isCollapsed ? (
-          <div style={{ fontSize: "12px", color: "var(--t3)" }}>
-            <div>Level <b>{level}</b></div>
-            <div><b>{xp}</b> XP accumulated</div>
-          </div>
+          <>
+            <div style={{ fontSize: "12px", color: "var(--t3)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>Lv <b>{level}</b></div>
+              <div><b>{xp}</b> XP</div>
+            </div>
+            {onOpenPanicMode && (
+              <button
+                type="button"
+                className="nm panic"
+                onClick={onOpenPanicMode}
+                style={{
+                  width: "100%",
+                  textAlign: "center",
+                  cursor: "pointer",
+                  borderRadius: "6px",
+                  padding: "6px 0",
+                  fontSize: "12px",
+                  border: "1px solid var(--border-2)",
+                  background: "var(--surface2)",
+                  color: "var(--t2)",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                Panic Mode
+              </button>
+            )}
+          </>
         ) : (
-          <div style={{ textAlign: "center", fontSize: "11px", color: "var(--t3)", fontWeight: "bold" }}>
-            L{level}
-          </div>
+          <>
+            <div style={{ textAlign: "center", fontSize: "11px", color: "var(--t3)", fontWeight: "bold" }}>
+              L{level}
+            </div>
+            {onOpenPanicMode && (
+              <button
+                type="button"
+                className="nm panic"
+                onClick={onOpenPanicMode}
+                title="Panic Mode"
+                style={{
+                  padding: "4px 0",
+                  width: "100%",
+                  fontSize: "10px",
+                  textAlign: "center",
+                  cursor: "pointer",
+                  borderRadius: "4px",
+                  border: "1px solid var(--border-2)",
+                  background: "var(--surface2)",
+                  color: "var(--t2)",
+                }}
+              >
+                SOS
+              </button>
+            )}
+          </>
         )}
       </div>
     </aside>
