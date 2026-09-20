@@ -8,6 +8,7 @@ import { ShareInformationView } from "@/components/community/ShareInformationVie
 import { BringeStudyRescue } from "@/components/bringe/BringeStudyRescue";
 import FloatingGraspingGauge from "@/components/common/FloatingGraspingGauge";
 import { getStoredTheme, setStoredTheme } from "@/lib/grasping-service";
+import { supabaseBrowser, supabaseBrowserConfigurationError } from "@/lib/supabase-browser";
 
 /* ============ TYPES ============ */
 interface AuthUser {
@@ -305,6 +306,7 @@ export default function App() {
   const [obFinalTarget, setObFinalTarget] = useState("");
   const [obCalibrating, setObCalibrating] = useState(false);
   const [obCalibLines, setObCalibLines] = useState<{ title: string; desc: string }[]>([]);
+  const [onboardingNote, setOnboardingNote] = useState("");
 
   // Island drawer & modals
   const [activeIslandIdx, setActiveIslandIdx] = useState<number | null>(null);
@@ -328,23 +330,8 @@ export default function App() {
   const saveState = (newState: AppState) => {
     setState(newState);
     try {
-      const clone = { ...newState };
-      if (!newState.remember) {
-        clone.auth = null;
-        if (newState.auth) {
-          sessionStorage.setItem("skilos_session", JSON.stringify(newState.auth));
-        } else {
-          sessionStorage.removeItem("skilos_session");
-        }
-      } else {
-        sessionStorage.removeItem("skilos_session");
-      }
+      const clone = { ...newState, auth: null };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(clone));
-      if (newState.auth) {
-        document.cookie = "skillos_auth=true; path=/; max-age=86400; SameSite=Lax";
-      } else {
-        document.cookie = "skillos_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-      }
     } catch {
       // ignore
     }
@@ -370,10 +357,6 @@ export default function App() {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed) {
-          if (!parsed.auth) {
-            const sess = sessionStorage.getItem("skilos_session");
-            if (sess) parsed.auth = JSON.parse(sess);
-          }
           if (!parsed.view) parsed.view = "main";
           loaded = parsed;
         }
@@ -390,20 +373,40 @@ export default function App() {
       setStoredTheme(getStoredTheme());
     } catch {}
 
-    setState(loaded);
     updateCountdown();
 
-    if (typeof window !== "undefined" && window.location.pathname === "/login") {
-      setScreen("login");
-    } else if (typeof window !== "undefined" && window.location.pathname === "/onboarding") {
-      setScreen("onboarding");
-    } else if (loaded.auth && loaded.onboarded) {
-      setScreen("app");
-    } else if (loaded.auth) {
-      setScreen("onboarding");
-    } else {
-      setScreen("login");
+    async function restoreAuthenticatedUser() {
+      if (!supabaseBrowser) {
+        loaded.auth = null;
+        setState(loaded);
+        setAuthNote(supabaseBrowserConfigurationError ?? "Authentication is not configured.");
+        setScreen("login");
+        return;
+      }
+      const { data, error } = await supabaseBrowser.auth.getSession();
+      if (error || !data.session) {
+        loaded.auth = null;
+        setState(loaded);
+        setScreen("login");
+        return;
+      }
+      const user = data.session.user;
+      loaded.auth = {
+        name: typeof user.user_metadata?.name === "string" ? user.user_metadata.name : user.email?.split("@")[0] ?? "Student",
+        email: user.email ?? "",
+      };
+      try {
+        const response = await fetch("/api/onboarding", { headers: { Authorization: `Bearer ${data.session.access_token}` } });
+        const payload = response.ok ? await response.json() : null;
+        loaded.onboarded = Boolean(payload?.profile?.onboarding_completed);
+      } catch {
+        loaded.onboarded = false;
+      }
+      setState(loaded);
+      setScreen(loaded.onboarded ? "app" : "onboarding");
     }
+
+    void restoreAuthenticatedUser();
 
     const timer = setInterval(updateCountdown, 30000);
     return () => clearInterval(timer);
@@ -471,21 +474,25 @@ export default function App() {
     saveState(updated);
   };
 
-  // Demo Login
   const handleDemoLogin = () => {
-    const s = freshState();
-    s.auth = { name: "Alex Chen", email: "alex@demo.sarvajna.app", demo: true };
-    s.onboarded = true;
-    s.material = true;
-    s.plan = true;
-    s.view = "main";
-    saveState(s);
-    setScreen("app");
+    const demoState = freshState();
+    demoState.auth = { name: "Alex Chen", email: "alex@demo.sarvajna.app", demo: true };
+    demoState.onboarded = false;
+    demoState.material = false;
+    demoState.plan = false;
+    demoState.view = "main";
+    saveState(demoState);
+    setObIndex(0);
+    setObSelSubjects([]);
+    setObSliderConf(50);
+    setObFinalTime("");
+    setObFinalTarget("");
+    setOnboardingNote("Demo calibration: answer these questions to tailor your sample study plan.");
+    setScreen("onboarding");
     window.scrollTo(0, 0);
   };
 
-  // Normal Login / Signup
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (authTab === "signup" && loginName.trim().length < 2) {
       setAuthNote("Please tell us your name.");
@@ -500,48 +507,84 @@ export default function App() {
       return;
     }
 
+    if (!supabaseBrowser) {
+      setAuthNote(supabaseBrowserConfigurationError ?? "Authentication is not configured.");
+      return;
+    }
+
     setAuthLoading(true);
-    setTimeout(() => {
-      setAuthLoading(false);
-      const computedName =
-        authTab === "signup"
-          ? loginName.trim()
-          : loginEmail
-              .split("@")[0]
-              .replace(/[._-]/g, " ")
-              .replace(/\b\w/g, (c) => c.toUpperCase());
+    setAuthNote("");
+    try {
+      const result = authTab === "signup"
+        ? await supabaseBrowser.auth.signUp({
+            email: loginEmail.trim(),
+            password: loginPass,
+            options: { data: { name: loginName.trim() } },
+          })
+        : await supabaseBrowser.auth.signInWithPassword({
+            email: loginEmail.trim(),
+            password: loginPass,
+          });
+      if (result.error) {
+        setAuthNote(result.error.message);
+        return;
+      }
+      if (!result.data.session) {
+        setAuthNote("Check your email to verify your account, then sign in.");
+        return;
+      }
+      let onboardingCompleted = false;
+      try {
+        const profileResponse = await fetch("/api/onboarding", {
+          headers: { Authorization: `Bearer ${result.data.session.access_token}` },
+        });
+        const profilePayload = profileResponse.ok ? await profileResponse.json() : null;
+        onboardingCompleted = Boolean(profilePayload?.profile?.onboarding_completed);
+      } catch {
+        onboardingCompleted = false;
+      }
       const updated: AppState = {
         ...state,
         remember: rememberMe,
-        auth: { name: computedName, email: loginEmail.trim(), demo: false },
+        auth: {
+          name: authTab === "signup" ? loginName.trim() : result.data.user?.user_metadata?.name || loginEmail.split("@")[0],
+          email: loginEmail.trim(),
+        },
+        onboarded: onboardingCompleted,
         view: "main",
       };
       saveState(updated);
-
-      if (updated.onboarded) {
-        setScreen("app");
-      } else {
-        setObIndex(0);
-        setObSelSubjects([]);
-        setScreen("onboarding");
-      }
+      setObIndex(0);
+      setObSelSubjects([]);
+      setScreen(onboardingCompleted ? "app" : "onboarding");
       window.scrollTo(0, 0);
-    }, 650);
+    } catch {
+      setAuthNote("Could not reach Supabase. Check your connection and try again.");
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
-  // Forgot Password
-  const handleForgotSubmit = (e: React.FormEvent) => {
+  const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!/^\S+@\S+\.\S+$/.test(forgotEmail.trim())) {
       setForgotNote("Enter a valid email so we can find the account.");
       return;
     }
-    setForgotNote("Reset link sent — check your inbox.");
+    if (!supabaseBrowser) {
+      setForgotNote(supabaseBrowserConfigurationError ?? "Authentication is not configured.");
+      return;
+    }
+    const { error } = await supabaseBrowser.auth.resetPasswordForEmail(forgotEmail.trim(), {
+      redirectTo: `${window.location.origin}/login`,
+    });
+    setForgotNote(error ? error.message : "Reset link sent — check your inbox.");
   };
 
-  // Onboarding Finish
-  const handleFinishOnboarding = () => {
+  const handleFinishOnboarding = async () => {
     setObCalibrating(true);
+    setOnboardingNote("");
+    setObCalibLines([]);
     const obData: OnboardingData = {
       hours: state.ob.hours || "2–4 hours",
       subjects: obSelSubjects.length ? obSelSubjects : ["Databases"],
@@ -579,6 +622,61 @@ export default function App() {
       ? "Database Systems"
       : obData.subjects?.[0] || "Database Systems";
     const conf = Math.min(70, Math.round(34 + (obData.conf ?? 50) * 0.35));
+
+    const isDemoSession = state.auth?.demo === true;
+    if (!isDemoSession && !supabaseBrowser) {
+      setObCalibrating(false);
+      setOnboardingNote(supabaseBrowserConfigurationError ?? "Authentication is not configured.");
+      return;
+    }
+    if (!isDemoSession) {
+      const { data: sessionData } = await supabaseBrowser!.auth.getSession();
+      if (!sessionData.session) {
+        setObCalibrating(false);
+        setOnboardingNote("Your session expired. Please sign in again.");
+        setScreen("login");
+        return;
+      }
+
+      const hoursPerDay = obData.hours === "Under 1 hour" ? 0.5 : obData.hours === "1–2 hours" ? 1.5 : obData.hours === "4+ hours" ? 5 : 3;
+      const learningStyle = obData.style === "Visual diagrams" ? "visual" : obData.style === "Reading notes" ? "reading" : obData.style === "Practice problems" ? "practice" : obData.style === "Video lessons" ? "auditory" : "mixed";
+      const focusSpan = obData.focus === "I drift quickly" ? 15 : obData.focus === "40-minute flow states" ? 40 : obData.focus === "Marathon sessions" ? 60 : 25;
+      const examDays = obData.timeline === "Tomorrow — rescue me" ? 1 : obData.timeline === "Within a week" ? 7 : obData.timeline === "This month" ? 30 : undefined;
+      const confidence = Math.max(1, Math.min(10, Math.round(obSliderConf / 10)));
+      const onboardingPayload = {
+        display_name: state.auth?.name,
+        hours_per_day: hoursPerDay,
+        interests: obData.subjects ?? ["Databases"],
+        difficulties: obData.order ?? "Needs an adaptive study plan.",
+        learning_style: learningStyle,
+        ...(examDays ? { next_exam: new Date(Date.now() + examDays * 86_400_000).toISOString() } : {}),
+        confidence_by_subject: Object.fromEntries((obData.subjects ?? ["Databases"]).map((subject) => [subject, confidence])),
+        best_time: obData.timeline === "Tomorrow — rescue me" ? "night" : "evening",
+        focus_span_min: focusSpan,
+        distraction: "medium",
+        preferred_feedback: "encouraging",
+        recent_study_consistency: "some_days",
+      };
+      try {
+        const response = await fetch("/api/onboarding", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${sessionData.session.access_token}`,
+            "Content-Type": "application/json",
+            "Idempotency-Key": crypto.randomUUID(),
+          },
+          body: JSON.stringify(onboardingPayload),
+        });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          throw new Error(payload?.error?.message_user ?? "Your profile could not be saved.");
+        }
+      } catch (error) {
+        setObCalibrating(false);
+        setOnboardingNote(error instanceof Error ? error.message : "Your profile could not be saved.");
+        return;
+      }
+    }
 
     const lines = [
       { title: "Focus span", desc: twin.focus },
@@ -958,6 +1056,7 @@ export default function App() {
               <>
                 <h3 className="ob-q">{currentQuestion.q}</h3>
                 <p className="ob-s">{currentQuestion.s}</p>
+                {onboardingNote && <div className="fnote show">{onboardingNote}</div>}
 
                 {currentQuestion.opts && !isFinal && (
                   <div className={`opts ${currentQuestion.two ? "two" : ""}`}>
