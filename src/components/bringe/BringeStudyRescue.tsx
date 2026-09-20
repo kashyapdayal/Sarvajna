@@ -2674,39 +2674,6 @@ export const BringeStudyRescue: React.FC<BringeStudyRescueProps> = ({
               Lock Schedule &amp; Enter Active Retrieval Loop &rarr;
             </button>
           </div>
-
-          {/* Floating AI Grasping & Dynamic Content Depth Telemetry Gauge (Bottom Right) */}
-          <div className="floating-grasping-gauge">
-            <div className="gauge-circle-wrap">
-              <svg className="gauge-svg" width="52" height="52" viewBox="0 0 52 52">
-                <circle className="gauge-bg-circle" cx="26" cy="26" r="21" />
-                <circle
-                  className="gauge-progress-circle"
-                  cx="26"
-                  cy="26"
-                  r="21"
-                  style={{
-                    strokeDasharray: `${2 * Math.PI * 21}`,
-                    strokeDashoffset: `${2 * Math.PI * 21 * (1 - liveGraspingOutOf10 / 10)}`,
-                  }}
-                />
-              </svg>
-              <div className="gauge-center-val">
-                <span className="gauge-val-num">{liveGraspingOutOf10.toFixed(1)}</span>
-                <span className="gauge-val-denom">/10</span>
-              </div>
-            </div>
-            <div className="gauge-info-col">
-              <div className="gauge-info-tag">
-                <span className="gauge-pulse-dot" />
-                <span>AI Depth Tuner</span>
-              </div>
-              <div className="gauge-status-label">
-                Grasping: <b>{liveGraspingOutOf10 >= 7.5 ? "Honors Rigor" : liveGraspingOutOf10 >= 5.0 ? "Applied Standard" : "Intuition Mode"}</b>
-              </div>
-              <div className="gauge-depth-sub">Tuning content depth to {liveContentDepthPercent}%</div>
-            </div>
-          </div>
         </div>
       )}
 

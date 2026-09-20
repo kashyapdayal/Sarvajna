@@ -6,6 +6,7 @@ import { AiResearchHub, TierFindings } from "@/components/main/AiResearchHub";
 import { GamifiedStudyPath } from "@/components/study-path/GamifiedStudyPath";
 import { ShareInformationView } from "@/components/community/ShareInformationView";
 import { BringeStudyRescue } from "@/components/bringe/BringeStudyRescue";
+import { FloatingGraspingGauge } from "@/components/common/FloatingGraspingGauge";
 import { getStoredTheme, setStoredTheme } from "@/lib/grasping-service";
 
 /* ============ TYPES ============ */
@@ -1451,6 +1452,9 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* Persistent Floating AI Grasping & Content Difficulty Meter (Bottom Right) */}
+      <FloatingGraspingGauge currentView={state.view} topicName={state.course} />
     </div>
   );
 }
