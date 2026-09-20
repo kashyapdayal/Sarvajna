@@ -1,0 +1,1969 @@
+################################################################################
+#                                                                              #
+#   SKILLOS  -  ADAPTIVE LEARNING OS  +  "EXAM EVE RESCUE" MODE               #
+#   MASTER PROJECT SPECIFICATION  (project.txt)                                #
+#                                                                              #
+#   Version : 1.0        Status : Hackathon build spec                         #
+#   Sibling : agent.md   (compact, token-cheap version of this file)           #
+#                                                                              #
+################################################################################
+
+Product name "SkillOS" is a working title. Rename freely; nothing in the code
+should hard-code it (use APP_NAME env var).
+
+================================================================================
+[S00] HOW TO USE THIS DOCUMENT
+================================================================================
+
+00.1  Every section has an ID like [S12]. Agents cite sections by ID.
+00.2  Two agent families exist. Do not confuse them:
+        R-series = RUNTIME agents   (AI workers that live INSIDE the product and
+                                     serve students: profiler, planner, notes...)
+        B-series = BUILD agents     (AI coding agents that BUILD the product:
+                                     backend, frontend, QA...)
+00.3  Reading order for a build agent:
+        1. agent.md (always)
+        2. This file: [S00], then only the sections listed under your agent ID
+           in [S16]. Do not read the whole file.
+00.4  Reading order for a human: S01 -> S03 -> S05 -> S13 -> S25 -> S26.
+00.5  Conflict rule: if agent.md and project.txt disagree, project.txt wins.
+      If two sections disagree, the higher-numbered section is more specific
+      and wins. Log the conflict in /docs/decisions.md.
+
+TABLE OF CONTENTS
+  S01 Vision, problem, positioning
+  S02 Users and personas
+  S03 FLAGSHIP: Exam Eve Rescue (product definition)
+  S04 Scope: MVP / V1 / V2
+  S05 System architecture
+  S06 Tech stack and infrastructure decisions
+  S07 Repository structure and conventions
+  S08 Data model
+  S09 Behavior signals and the Learning Twin
+  S10 Ingestion pipeline (PDF / images / text)
+  S11 Exam intelligence (topic extraction, PYQ analytics)
+  S12 Triage engine ("Pass Core" algorithm)
+  S13 Rescue planner (time-blocking algorithm)
+  S14 Content generation specs (notes, cheat sheets, flashcards, quizzes)
+  S15 RUNTIME agents (R0 - R14)
+  S16 BUILD agents (B0 - B8)
+  S17 End-to-end workflow and state machine
+  S18 Live adaptation and Panic Mode
+  S19 Prompt library
+  S20 API contract
+  S21 Frontend / UX specification
+  S22 Supporting modules (paths, explore, resources, community, gamification,
+      translation, knowledge base)
+  S23 Quality, evals, testing
+  S24 Security, privacy, ethics
+  S25 Hackathon schedule
+  S26 Demo script and pitch
+  S27 Risks and mitigations
+  S28 Roadmap
+  S29 Glossary
+
+================================================================================
+[S01] VISION, PROBLEM, POSITIONING
+================================================================================
+
+01.1  THE OBSERVED PROBLEM
+      Most school and college students do not study steadily. They study
+      intensely the LAST DAY before the exam. On that day they:
+        - do not know which topics actually matter,
+        - waste hours on low-value topics because they are "interesting",
+        - panic, jump between topics, and finish nothing,
+        - have no notes they trust, and no time to make them,
+        - sleep too little, which destroys recall.
+      Existing tools (generic AI tutors, YouTube, textbooks) assume a student with
+      weeks of time. Nobody designs for the real behavior: last-day learning.
+
+01.2  THE PRODUCT IN ONE SENTENCE
+      SkillOS is an AI learning operating system that knows each student
+      (Learning Twin), plans their journey, finds the best resources, teaches,
+      evaluates, and rebuilds the path continuously - and its flagship mode,
+      EXAM EVE RESCUE, turns "I have 1 day and I know nothing" into a
+      personalized, calm, hour-by-hour plan with notes and a cheat sheet
+      that maximizes the student's chance of passing.
+
+01.3  TWO LAYERS OF THE PRODUCT
+      Layer A - FLAGSHIP (what judges and first-time users see):
+                Exam Eve Rescue. Upload syllabus/PYQs -> get Pass Core topics,
+                hour-by-hour plan, notes, cheat sheet, quizzes.
+      Layer B - PLATFORM (the long-term moat):
+                Learning Twin, adaptive roadmap, resource discovery graph,
+                mistake intelligence, gamified quest map, knowledge base,
+                community-submitted resources, per-paragraph translation.
+      Rule: Layer A must work end-to-end BEFORE any Layer B module is started,
+      except the Learning Twin (shared foundation).
+
+01.4  POSITIONING LINE
+      "Same exam. Different student. Different plan."
+      Secondary: "Don't study everything. Study what gets you through."
+
+01.5  DIFFERENTIATORS (memorize for pitch)
+      D1  Designed for last-day reality, not idealized study habits.
+      D2  Pass-Core triage: mathematically picks the minimum topic set that
+          reaches the pass mark plus a safety margin (see S12).
+      D3  Personalization by behavior (focus span, speed, chronotype, panic
+          level), not just by topic knowledge.
+      D4  PYQ-driven prediction with transparent evidence ("appeared in 7 of
+          9 papers").
+      D5  Anti-overwhelm UX: one task at a time, Panic Mode, protected sleep.
+      D6  Notes + cheat sheet generated from THE STUDENT'S OWN uploaded material
+          with page citations (not generic internet text).
+      D7  Honest confidence: shows Pass Confidence with a range and reasons;
+          never promises a guaranteed pass.
+      D8  Gets smarter every exam (post-exam feedback loop updates Twin + PYQ
+          database).
+
+01.6  NON-GOALS (say no to these)
+      - Not a full LMS or a school-admin tool.
+      - Not a system that helps students cheat inside the exam hall (see S24).
+      - Not a "guaranteed pass" product; we maximize probability and say so.
+      - No 20-microservice architecture. One Next.js app + Supabase + workers.
+
+================================================================================
+[S02] USERS AND PERSONAS
+================================================================================
+
+02.1  PRIMARY USER: the Last-Day Learner
+      Age 14-24. School (grades 8-12), undergraduate (engineering, arts,
+      science, commerce), diploma/polytechnic, competitive-exam beginners.
+      Uses a phone first, laptop second. Studies late at night. Unreliable
+      internet at times. May prefer regional language explanations (e.g.
+      Malayalam, Hindi, Tamil) but English technical terms.
+
+02.2  PERSONAS (use these in design reviews and in the demo)
+      P1  "Anu" - Engineering sem-3 student. Exam in 16 hours. Has last 5 years
+          of PYQs as PDFs. Strong in theory, weak in numericals. Focus span 25
+          min. Panics after 10 pm. Needs: Pass Core + formulas cheat sheet.
+      P2  "Rahul" - Grade 12 commerce. Exam in 20 hours. Has textbook photos
+          only. Learns best from examples. Phone-only. Needs: image OCR,
+          simple language, mnemonics, Malayalam translation on tap.
+      P3  "Meera" - Final-year degree student. 3 exams in 3 days. Needs: multi-
+          exam allocation (V1). Consistent but time-poor.
+      P4  "Kabir" - Skipped the whole semester. Zero knowledge. Needs: honest
+          "Survival mode" plan, not false hope; lowest-depth coverage of
+          highest-frequency topics.
+      P5  "Teacher/Mentor" (V2) - shares a syllabus/PYQ pack with a class.
+
+02.3  EMOTIONAL STATE MODEL
+      Arrival state is usually: anxious, guilty, overwhelmed.
+      Product tone: calm, direct, non-judgmental, encouraging, short sentences.
+      Never shame ("you should have started earlier"). Say: "Here is what we can
+      do with the time you have."
+
+================================================================================
+[S03] FLAGSHIP: EXAM EVE RESCUE (PRODUCT DEFINITION)
+================================================================================
+
+03.1  DEFINITION
+      A guided flow that takes a student with limited time before an exam and
+      produces, within about 3 minutes of wall-clock effort:
+        (1) Pass Core map      - which topics matter most and why
+        (2) Rescue Plan        - hour-by-hour timeline personalized to behavior
+        (3) Rescue Notes       - layered notes per topic (30-sec / 3-min / deep)
+        (4) Cheat Sheet        - 1-2 page condensed revision sheet per subject
+        (5) Flashcards + Quick Quizzes per topic, auto-graded
+        (6) Predicted questions + answer templates (2 / 5 / 10 mark structure)
+        (7) Pass Confidence meter that updates as the student progresses
+        (8) Calm layer         - Now/Next/Later view, Panic Mode, protected sleep
+
+03.2  MODES BY TIME REMAINING (T = hours until exam start)
+      EMERGENCY  T < 4    : Pass Core L1 only, cheat sheet, flashcards, no deep
+                            notes, no full sleep block (do a 20-min nap max).
+      SPRINT     4 <= T < 10 : Pass Core L1 + selective L2, short sleep block
+                            (min 4.5h if T allows at all; else warn).
+      STANDARD   10 <= T < 30 : full flow (the "1 day before" case). DEFAULT.
+      EXTENDED   30 <= T <= 72 : multi-day plan, day-by-day, each day is a
+                            STANDARD-like plan; Day-last is the "eve" plan.
+      T > 72 h   : redirect to normal adaptive roadmap (Layer B).
+
+03.3  INPUTS THE STUDENT CAN GIVE (any combination; all optional except exam
+      date/time and subject)
+      I1  Exam name, subject, domain/board/university/course
+      I2  Exam date + start time, duration
+      I3  Syllabus (PDF, image, pasted text, or typed topic list)
+      I4  Previous-year question papers (PYQ) - PDFs, images, links, pasted text
+      I5  Class notes, textbook chapters, PPTs (PDF/image/text)
+      I6  Exam pattern (sections, marks, choice rules, negative marking)
+      I7  Target: "just pass" (default) / 60% / 75% / custom
+      I8  Self-report on study behavior (the 8-question behavior check, S09)
+      I9  Optional: past-performance snapshot (last internal marks, weak subject)
+      Missing input handling:
+        - No syllabus + no PYQ: agent proposes topic list from curriculum
+          library for the given board/course and labels it "UNVERIFIED - please
+          confirm". Student can edit. Pass Confidence is capped at MEDIUM.
+        - No exam pattern: assume typical pattern for the board/course from
+          library, label as assumption.
+
+03.4  OUTPUT SCREENS (see S21 for wireframes)
+      O1  "Your Rescue Plan is ready" summary card: Pass Confidence, hours,
+          number of Pass Core topics, what we will skip, sleep protected.
+      O2  Timeline (Now / Next / Later default; full timeline on demand)
+      O3  Topic cards (Pass Core, Should-do, Nice-to-have, Skipped-with-reason)
+      O4  Notes reader with 3 depth layers and per-paragraph translate/simplify
+      O5  Cheat sheet viewer + PDF export (print-friendly and phone-friendly)
+      O6  Quiz/flashcard runner
+      O7  Progress + Confidence live meter
+      O8  Panic button (always visible)
+
+03.5  DESIGN PRINCIPLES (non-negotiable)
+      DP1  One primary action on screen at a time.
+      DP2  Show at most 3 upcoming tasks. Everything else collapsed.
+      DP3  Every plan block has a duration and a clear "done" condition.
+      DP4  Protect sleep. If time is short, cut content, not sleep (below the
+           minimum viable sleep, warn clearly; do not silently remove).
+      DP5  Explain the "why" of each priority in one line with evidence
+           ("Appeared in 6/8 papers, avg 10 marks").
+      DP6  Everything generated from student's own documents cites doc + page.
+      DP7  Every claim of prediction is labeled as an estimate.
+      DP8  Offline-friendly: after plan generation, plan + notes + cheat sheet
+           + flashcards must work without internet (PWA cache).
+      DP9  Language: English default; translate/simplify per paragraph on tap.
+      DP10 No dark patterns, no streak-shaming, no fake urgency.
+
+03.6  THE "CHEAT SHEET" FEATURE - PRODUCT FRAMING (important)
+      The cheat sheet is a CONDENSED REVISION SHEET for the last hours before
+      the exam: formulas, definitions, mnemonics, diagrams, answer skeletons,
+      common traps, and a "panic card" of the 10 most important lines.
+      UI copy and Terms state: it is a study aid to memorize from; it is not
+      for use inside an examination hall. (See S24.) Internally the feature key
+      is `cheatsheet`; user-facing label can be "Cheat Sheet" or "Rescue Sheet".
+
+03.7  HONESTY CONTRACT
+      - Pass Confidence is an ESTIMATE from PYQ patterns, time available, and
+        the student's measured behavior. Always show range + drivers.
+      - If the target is unrealistic for the time left, say so plainly and
+        show the best achievable option ("With 6 hours, realistic target is
+        'borderline pass'. Here is the safest way to use it.").
+      - Never state "guaranteed pass".
+
+================================================================================
+[S04] SCOPE: MVP / V1 / V2
+================================================================================
+
+04.1  MVP (hackathon) - MUST WORK END TO END
+      M1  Auth (email/Google via Supabase Auth)
+      M2  Rescue intake form + 8-question behavior check + 5-question
+          micro-diagnostic on top topics
+      M3  Upload: PDF (text-based) + image (OCR) + pasted text; PYQ + syllabus +
+          notes
+      M4  Ingestion: parse -> chunk -> embed -> topic extraction -> PYQ mapping
+      M5  Triage engine with Pass Core selection + Pass Confidence
+      M6  Planner producing hour-by-hour plan (STANDARD + EMERGENCY modes)
+      M7  Notes (3 layers) + Cheat Sheet (HTML + PDF export) for Pass Core topics
+      M8  Flashcards + quick quiz with auto-grading + mistake tagging
+      M9  Live adaptation: replan on overrun or weak quiz result; Panic Mode
+      M10 Per-paragraph translate (Malayalam, Hindi + English simplify)
+      M11 Learning Twin (basic): stores behavior metrics, updates after session
+      M12 Demo mode with two seeded students (Anu vs Rahul) - see S26
+      M13 PWA offline cache for plan, notes, cheat sheet, flashcards
+
+04.2  V1 (after hackathon, first 6-8 weeks)
+      - Multi-exam allocation (3 exams in 3 days)
+      - Resource Discovery Engine (web + community resources ranked per student)
+      - Community submissions with reputation
+      - Full Adaptive Roadmap (long-term path) and gamified Quest Map
+      - Weekly revision digest (spaced repetition)
+      - WhatsApp/Telegram reminder channel
+      - Voice mode (read the cheat sheet aloud)
+
+04.3  V2
+      - Teacher/class packs; institution dashboards
+      - Docker code sandbox for programming/CTF labs
+      - Handwritten note OCR at higher accuracy
+      - Post-exam result loop to calibrate predictor per university
+      - Regional-language full UI
+
+04.4  CUT LINE RULE
+      If time runs short, cut in this order (last cut first):
+        M13 offline -> M10 translate -> M12 second demo student -> M9 replan
+        (keep Panic Mode) -> M8 quiz grading (keep flashcards).
+      NEVER cut: M3, M4, M5, M6, M7 (this is the flagship).
+
+================================================================================
+[S05] SYSTEM ARCHITECTURE
+================================================================================
+
+05.1  HIGH-LEVEL DIAGRAM
+
+     Browser / PWA (Next.js, TS, Tailwind, shadcn/ui)
+        |   HTTPS (REST + SSE streaming)         ^ Supabase Realtime (plan updates)
+        v                                        |
+     Next.js Route Handlers / Server Actions  (thin API layer, auth check, Zod)
+        |                      |                       |
+        |                      v                       v
+        |              Job queue (jobs table)    Supabase Storage (uploads, PDFs)
+        |                      |
+        v                      v
+     Postgres (Supabase)   WORKER (Node, long-running or Edge Function)
+       - relational data      - ingestion pipeline (S10)
+       - pgvector chunks      - agent runner (calls LLM provider)
+       - RLS security         - PDF generation (headless Chromium)
+                              - scheduled jobs (reminders, weekly digest)
+                                      |
+                                      v
+                              LLM provider abstraction (default: OpenAI API)
+                              + OCR (Tesseract or vision-LLM) + Web search API
+                                (V1) + Translation via LLM
+
+05.2  ORCHESTRATION MODEL
+      One ORCHESTRATOR (R0) executes a "run graph" per user action. Each node is
+      a runtime agent (R1..R14) with typed input/output (Zod schemas). The
+      orchestrator stores every step in `agent_runs` for traceability, retry,
+      cost tracking and debugging.
+
+05.3  KEY DESIGN RULES
+      A1  Deterministic code for math (triage, scheduling, scoring). LLMs for
+          language, extraction and judgment. NEVER let an LLM do arithmetic for
+          the schedule; the LLM proposes, the planner code computes and validates.
+      A2  Every LLM call returns JSON validated by Zod. On invalid JSON: retry
+          once with a repair prompt, then fall back to a safe default.
+      A3  Long jobs are async. UI shows staged progress via SSE
+          ("Reading PDF... Finding topics... Checking past papers...").
+      A4  All content is RAG-grounded on the student's uploaded chunks when they
+          exist; ungrounded content carries an "AI-general" label.
+      A5  Idempotent jobs: re-running ingestion for the same document hash must
+          not duplicate rows.
+      A6  Cost guard: per-user daily token budget; cheap model for extraction and
+          classification, strong model for planning rationale, verification and
+          note writing.
+      A7  Everything user-visible is versioned: plan_v1, plan_v2 (after replan)
+          so the student can see "why the plan changed".
+
+05.4  LATENCY TARGETS (STANDARD MODE, 30-page PDF total)
+      Upload -> "processing" visible          < 1 s
+      Ingestion (parse+chunk+embed)           < 45 s
+      Topic extraction + PYQ mapping          < 40 s
+      Triage + plan                           < 15 s
+      First notes (top 3 topics) streamed     < 30 s after plan
+      Full notes + cheat sheet (Pass Core)    < 3 min, streamed progressively
+      Student can start the first block before everything finishes (progressive
+      delivery is a requirement).
+
+================================================================================
+[S06] TECH STACK AND INFRASTRUCTURE DECISIONS
+================================================================================
+
+06.1  STACK (chosen; do not change without logging a decision)
+      Frontend      Next.js (App Router) + TypeScript + Tailwind + shadcn/ui
+      State/data    TanStack Query + Zustand (UI state only)
+      Validation    Zod (shared between client, API and agents)
+      Backend       Next.js Route Handlers + Supabase (Postgres, Auth, Storage,
+                    Realtime, Edge Functions)
+      Vector search pgvector inside Supabase Postgres
+      Worker        Node worker (Railway/Fly/Render or Supabase Edge Function)
+                    reading the `jobs` table. Keeps ingestion off the web tier.
+      LLM           Provider abstraction `llm.ts` (default OpenAI API).
+                    Tiers: FAST (extraction/classification), STRONG (planning
+                    rationale, note writing, verification), EMBED (embeddings).
+                    Model names live in env vars, never in code.
+      OCR           Tesseract (server) for clean printed text; vision-capable LLM
+                    for phone photos, tables, diagrams, handwriting fallback.
+      PDF parse     pdfjs-dist / pdf-parse for text PDFs; fall back to OCR if
+                    text density per page is low (< 200 chars).
+      PDF export    Headless Chromium (Playwright) rendering an HTML template ->
+                    A4 PDF (cheat sheet + notes bundle).
+      Diagrams      Mermaid (in notes) + simple SVG generated from JSON.
+      PWA           next-pwa / Workbox; IndexedDB (Dexie) for offline content.
+      Analytics     PostHog (events) - behavior signals also stored in own DB.
+      Hosting       Vercel (web) + Supabase (data) + worker host.
+      Sandbox (V2)  Docker for code execution.
+
+06.2  ENVIRONMENT VARIABLES (all in .env.example, never commit secrets)
+      APP_NAME, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      SUPABASE_SERVICE_ROLE_KEY, LLM_PROVIDER, LLM_API_KEY,
+      LLM_MODEL_FAST, LLM_MODEL_STRONG, LLM_MODEL_EMBED, LLM_MODEL_VISION,
+      OCR_MODE (tesseract|vision), MAX_UPLOAD_MB (default 25),
+      DAILY_TOKEN_BUDGET_PER_USER, WORKER_CONCURRENCY, SEARCH_API_KEY (V1),
+      POSTHOG_KEY.
+
+06.3  WHY THESE CHOICES (one line each; use in Q&A)
+      Supabase: auth + DB + storage + realtime + vectors in one place = fastest
+      to ship. pgvector: no extra vector DB to run. Deterministic planner in
+      code: reliable math, testable. PWA: students study on phones with flaky
+      networks. Provider abstraction: swap models without touching agents.
+
+================================================================================
+[S07] REPOSITORY STRUCTURE AND CONVENTIONS
+================================================================================
+
+07.1  LAYOUT
+      /apps/web                Next.js app (UI + API route handlers)
+        /app                   routes (see S21)
+        /components            UI components (ui/, rescue/, notes/, quiz/)
+        /lib                   client helpers, supabase client, offline store
+      /packages/core           PURE deterministic logic (no IO): triage.ts,
+                               planner.ts, scoring.ts, replan.ts, twin.ts
+                               + full unit tests. Shared by web and worker.
+      /packages/agents         Runtime agents R1..R14: one folder per agent
+                               (prompt.ts, schema.ts, run.ts, eval/ )
+      /packages/ingest         Parsers, OCR, chunker, embedder, topic mapper
+      /packages/schemas        Zod schemas + TS types (single source of truth)
+      /packages/llm            Provider abstraction, retries, JSON repair,
+                               token accounting
+      /apps/worker             Job runner (ingestion, generation, PDF export)
+      /supabase
+        /migrations            SQL migrations (numbered)
+        /seed                  Seed data: curricula, demo students, sample PYQs
+        /policies              RLS policies
+      /docs                    decisions.md, api.md, prompts-changelog.md
+      /evals                   Golden datasets + eval scripts (S23)
+      /scripts                 dev utilities
+      agent.md, project.txt    (repo root)
+
+07.2  CONVENTIONS
+      - TypeScript strict. No `any` in packages/core and packages/schemas.
+      - Files < 300 lines. One responsibility per file.
+      - Branches: main (protected), feat/<agent>-<topic>. Small PRs.
+      - Commit style: type(scope): message (feat, fix, docs, test, chore).
+      - Every agent folder must contain: prompt.ts, schema.ts, run.ts, and at
+        least 5 eval cases in eval/.
+      - Every deterministic function in packages/core has unit tests including
+        edge cases (0 time, 0 topics, all mastered, impossible target).
+      - Errors: typed error classes; user-facing messages are calm and
+        actionable ("We couldn't read page 4. Try a clearer photo.").
+      - Logging: structured JSON; never log full document text or PII.
+      - Definition of Done: see agent.md and S16 per agent.
+
+================================================================================
+[S08] DATA MODEL (POSTGRES)
+================================================================================
+
+08.1  CONVENTIONS: uuid primary keys (gen_random_uuid()), created_at/updated_at
+      timestamptz, soft-delete via deleted_at where noted, RLS ON for every
+      user-owned table (policy: user_id = auth.uid()).
+
+08.2  TABLES (columns abbreviated; add indexes on FKs and (user_id, created_at))
+
+      profiles
+        id (=auth.users.id), display_name, language_pref (en|ml|hi|ta...),
+        level (school|ug|pg|other), board_or_university, created_at
+
+      learning_twin                       -- one row per user (versioned JSON)
+        user_id, version, metrics jsonb, updated_at
+        metrics = {
+          focus_span_min, speed_factor, retention_est, chronotype,
+          panic_index, procrastination_index, plan_adherence,
+          prefers: {video, reading, practice, examples},
+          time_of_day_accuracy: {morning, afternoon, evening, night},
+          topic_mastery: { "<topic_key>": 0..1 }, confidence_calibration
+        }
+
+      exams
+        id, user_id, title, subject, domain, board_or_university,
+        exam_start timestamptz, duration_min, target_type (pass|percent|custom),
+        target_percent, pass_percent (default 40), safety_margin (default 8),
+        total_marks, pattern jsonb, negative_marking bool, status, mode
+        pattern = { sections:[{name, question_type, count, attempt_k, marks_each,
+                              choice_rule}] }
+
+      documents
+        id, user_id, exam_id, kind (syllabus|pyq|notes|textbook|other),
+        file_path, mime, sha256, pages, ocr_used bool, status
+        (uploaded|parsing|ready|failed), meta jsonb (year, paper_code)
+
+      document_chunks
+        id, document_id, page_from, page_to, text, tokens, embedding vector(N),
+        meta jsonb
+
+      topics
+        id, exam_id, key (slug), title, parent_id, unit, complexity (1..5),
+        est_weight, source (syllabus|inferred|user), verified bool
+
+      topic_edges                         -- prerequisites
+        from_topic_id, to_topic_id, strength (soft|hard)
+
+      pyq_questions
+        id, exam_id, document_id, year, paper_code, section, q_number,
+        text, marks, q_type (mcq|short|long|numeric|diagram), topic_ids uuid[],
+        answer_hint text null, confidence
+
+      topic_stats                         -- derived, recomputed after ingestion
+        exam_id, topic_id, appearances, papers_considered, recency_weighted_freq,
+        avg_marks, max_marks, last_year, p_appear, expected_marks
+
+      rescue_sessions
+        id, user_id, exam_id, state (see S17), plan_version, pass_confidence,
+        predicted_score, sigma, started_at, ended_at
+
+      plan_blocks
+        id, session_id, plan_version, seq, type (LEARN|RECALL|REVIEW|BUILD_SHEET|
+        BREAK|MEAL|SLEEP|WARMUP|FINAL_SWEEP|MORNING_CARD), topic_id null,
+        depth (L0|L1|L2|L3), start_at, planned_min, actual_min, status
+        (todo|active|done|skipped|dropped), done_condition text, why text
+
+      notes
+        id, topic_id, session_id, layer (L30s|L3m|DEEP), content_md, citations
+        jsonb [{document_id,page}], grounded bool, verified bool, lang
+
+      cheat_sheets
+        id, session_id, subject, content jsonb (sections), html, pdf_path,
+        version, verified bool
+
+      flashcards
+        id, topic_id, session_id, front, back, difficulty, source_pyq_id null,
+        box (1..3), next_due_at
+
+      quizzes / quiz_items
+        quizzes(id, session_id, topic_id, kind (diagnostic|recall|mock))
+        quiz_items(id, quiz_id, q_type, stem, options jsonb, answer, rubric,
+                   misconception_tag, difficulty, marks)
+
+      attempts
+        id, user_id, quiz_item_id, response, correct bool, score, time_ms,
+        hints_used, confidence_self (1..5), created_at
+
+      mistakes
+        id, user_id, attempt_id, topic_id, error_type (concept|recall|careless|
+        calculation|misread|time), explanation, related_topic_ids, resolved bool
+
+      events                              -- behavior log (append-only)
+        id, user_id, session_id, type, payload jsonb, ts
+
+      agent_runs                          -- trace of every agent call
+        id, session_id, agent (R1..R14), input_hash, output jsonb, model,
+        tokens_in, tokens_out, cost_usd, latency_ms, status, error, created_at
+
+      jobs
+        id, type, payload jsonb, status (queued|running|done|failed), attempts,
+        run_after, locked_by, error, created_at
+
+      resources / resource_votes / contributors      (V1, schema now, UI later)
+        resources(id, url, title, topic_keys, difficulty, quality_score,
+                  recency, hands_on bool, status, submitted_by)
+        contributors(user_id, submitted, accepted, rating, reputation)
+
+      curricula                           -- seeded reference library
+        id, board_or_university, course, subject, topic_tree jsonb,
+        typical_pattern jsonb, typical_pass_percent
+
+08.3  RLS: users read/write only their own rows. `curricula` and verified
+      `resources` are public-read. Service role (worker) bypasses RLS.
+      Storage buckets: `uploads` (private, path = user_id/exam_id/filename),
+      `exports` (private, signed URLs, 24h expiry).
+
+================================================================================
+[S09] BEHAVIOR SIGNALS AND THE LEARNING TWIN
+================================================================================
+
+09.1  PURPOSE: The student's "overall study routine or behavior" personalizes the
+      plan. For first-time users we only have self-report + a 3-minute
+      micro-diagnostic; for returning users the Learning Twin accumulates real
+      data. Design so day-1 users still get a useful plan.
+
+09.2  THE 8-QUESTION BEHAVIOR CHECK (tap-based, < 90 seconds)
+      Q1  How long can you focus before your mind drifts?
+          (<15 / 15-25 / 25-40 / 40+ min)                -> focus_span_min
+      Q2  When do you think best? (morning / afternoon / evening / night)
+                                                          -> chronotype
+      Q3  When you study, what works best? (videos / reading / practice
+          questions / examples / explaining to someone)  -> prefers
+      Q4  How much of the syllabus have you touched at all? (0 / <25 / 25-50 /
+          50+ %)                                          -> prior_coverage
+      Q5  How do you feel right now? (calm / nervous / very anxious / blank)
+                                                          -> panic_index seed
+      Q6  Phone distraction level while studying? (low / medium / high)
+                                                          -> distraction
+      Q7  Hours you can REALLY give before the exam (excluding sleep/meals)?
+                                                          -> declared_hours
+      Q8  Which subject type is hardest for you? (memorizing / numericals /
+          diagrams / long answers / theory)               -> weak_style
+
+09.3  THE 5-QUESTION MICRO-DIAGNOSTIC
+      Generated by R10 from the top-5 highest expected-marks topics (from S11).
+      Format: MCQ / one-line answers. Time-boxed to 3 minutes. Measures: mastery
+      seed per topic, speed (ms per item), confidence calibration (self-rated
+      confidence vs correctness).
+      Skippable, but skipping lowers Pass Confidence certainty (wider sigma).
+
+09.4  EVENTS TO LOG (table `events`)
+      session_start/stop, block_start/complete/skip/overrun, tab_blur/focus,
+      idle_gt_60s, card_view(time_ms), quiz_answer(time_ms, correct, hints),
+      panic_pressed, replan_triggered, translate_used, note_layer_switch,
+      cheatsheet_opened, sleep_block_shortened, feedback_thumb.
+
+09.5  DERIVED METRICS (computed in packages/core/twin.ts; deterministic)
+      focus_span_min     = median uninterrupted block time (blur-adjusted),
+                           blended with self-report (weight shifts to observed
+                           as n_sessions grows).
+      speed_factor       = clamp(baseline_ms / observed_ms, 0.6, 1.5) per
+                           difficulty band.
+      retention_est      = accuracy on recall items 2h+ after learn block.
+      plan_adherence     = completed_planned_min / planned_min (rolling).
+      overrun_ratio      = actual_min / planned_min (per block type).
+      procrastination_ix = seconds from block-ready to block-start (normalized).
+      panic_index        = f(self-report, panic button presses, rapid skipping,
+                           quiz accuracy drop at night). 0..1.
+      chronotype_fit     = accuracy by time-of-day bucket.
+      calibration        = mean(|self_confidence - correctness|).
+      Update rule: exponential moving average, alpha = 0.3 per session; cold-
+      start priors come from self-report; store version history.
+
+09.6  HOW THE TWIN CHANGES THE PLAN (explicit mappings; implement in S13)
+      focus_span short        -> shorter blocks (15/5), more breaks, more variety
+      chronotype night        -> hardest topics placed in evening window
+      speed_factor low        -> more minutes per topic; smaller Pass Core
+      panic_index high        -> smaller visible task set, calmer copy, early
+                                 easy win first, 60-sec breathing block
+      prefers examples        -> notes lead with worked examples
+      prefers practice        -> recall quizzes before reading (test-first)
+      weak_style numericals   -> extra worked-problem blocks, formula sheet
+                                 emphasized
+      distraction high        -> shorter blocks, "phone away" prompts, no long
+                                 video resources
+      calibration poor        -> more quiz evidence before trusting mastery
+
+09.7  PRIVACY: Twin data is the user's. Provide "View my Twin" and "Delete my
+      Twin" in settings (S24).
+
+================================================================================
+[S10] INGESTION PIPELINE (PDF / IMAGES / TEXT)
+================================================================================
+
+10.1  PIPELINE STAGES (worker jobs; each stage idempotent via sha256 + stage flag)
+
+      STAGE 0  VALIDATE
+        - Allowed: pdf, png, jpg, jpeg, webp, txt, md, docx (V1), pptx (V1).
+        - Max size MAX_UPLOAD_MB, max pages 300 per doc (MVP).
+        - Virus/malware scan hook (V1) and MIME sniffing (never trust extension).
+        - Compute sha256; if same hash exists for user+exam -> reuse.
+
+      STAGE 1  EXTRACT TEXT
+        - Text PDF: extract per page. If avg chars/page < 200 -> treat as scan.
+        - Scan/image: OCR (Tesseract; if confidence < 0.6 or layout is a table/
+          diagram/handwriting -> vision-LLM transcription).
+        - Preserve: page numbers, headings (by font size/position), lists,
+          tables (as markdown tables), math (LaTeX-ish where possible).
+        - Output: pages[] {page_no, text, ocr_conf, blocks[]}
+
+      STAGE 2  CLEAN
+        - Remove headers/footers repeated on > 60% of pages, page numbers,
+          watermarks. De-hyphenate line breaks. Normalize unicode, quotes.
+        - Detect language per page (en/ml/hi/ta...). Keep original + flag.
+
+      STAGE 3  CLASSIFY DOCUMENT (R2 with FAST model, 1 call on first pages)
+        - kind: syllabus | pyq | notes | textbook | other
+        - meta: year, exam name, paper code, total marks, sections detected.
+
+      STAGE 4  CHUNK
+        - Semantic chunks by headings; 300-500 tokens target, 50 token overlap;
+          never split a table, worked example, or question in the middle.
+        - PYQ documents: chunk PER QUESTION (regex + LLM boundary check).
+
+      STAGE 5  EMBED + STORE
+        - Batch embed (LLM_MODEL_EMBED). Store in document_chunks with page range.
+
+      STAGE 6  STRUCTURE EXTRACTION (R3)
+        - Syllabus -> topic tree (units, topics, subtopics).
+        - PYQ -> pyq_questions rows (marks, type, section, year).
+        - Notes/textbook -> topic-to-chunk mapping (which chunks teach which topic).
+
+      STAGE 7  QUALITY GATE
+        - If extraction failed for > 30% of pages: mark doc "needs attention",
+          tell user which pages failed and offer "retake photo" / "paste text".
+        - Never silently continue with garbage. Confidence is lowered visibly.
+
+10.2  MULTI-SOURCE MERGING
+      - Topic normalization: cluster titles with embeddings + fuzzy matching,
+        create canonical topic `key` (e.g. "normalization-dbms"), map aliases.
+      - Conflicting mark values: trust the most recent PYQ; store all.
+
+10.3  NO-DOCUMENTS FALLBACK
+      If the student uploads nothing: R3 pulls the topic tree from `curricula`
+      by board/course/subject; if absent, generate a provisional syllabus with
+      the STRONG model and label unverified=true. Student must tap "Looks right"
+      or edit topics before triage.
+
+10.4  PROGRESS EVENTS (stream to UI)
+      uploaded -> parsing (n/N pages) -> cleaning -> classifying -> indexing ->
+      extracting topics -> mapping past papers -> ready.
+
+10.5  FAILURE HANDLING TABLE
+      Encrypted PDF        -> ask user to unlock or paste text.
+      Blurry photo         -> flag pages with ocr_conf < 0.5, suggest retake.
+      Huge file            -> ask to upload only relevant chapters/years.
+      Non-English pages    -> process; translate summaries to English for
+                              topic keys; keep source language for quoting.
+      Duplicate upload     -> reuse, tell user.
+
+================================================================================
+[S11] EXAM INTELLIGENCE (TOPIC EXTRACTION, PYQ ANALYTICS)
+================================================================================
+
+11.1  GOAL: Convert raw documents into a numeric model of the exam:
+      for each topic t -> p_appear, avg_marks, complexity, prerequisites,
+      likely question forms.
+
+11.2  TOPIC TREE
+      - Source of truth order: syllabus > teacher notes > textbook TOC >
+        curriculum library > inferred from PYQs.
+      - Each topic: key, title, unit, complexity (1-5: 1 definition-level,
+        3 multi-step concept, 5 heavy derivation/numerical).
+      - Prerequisites via topic_edges. Mark `hard` when the topic is unlearnable
+        without the prerequisite.
+
+11.3  PYQ -> TOPIC MAPPING
+      - For each question: R3 assigns 1-3 topic_ids with confidence.
+      - Low-confidence mappings (< 0.6) are shown to the student for one-tap
+        confirmation ("Is this question about Normalization?") only if it
+        affects a top-10 topic. Otherwise ignore.
+
+11.4  STATS (deterministic, packages/core/scoring.ts)
+      Let papers = list of PYQ papers (years). n = count of papers.
+      recency weight for paper year y:  w_y = 0.5 ^ ((current_year - y) / 3)
+      recency_weighted_freq f_t = ( sum over papers of w_y * appeared_y(t) )
+                                  / ( sum over papers of w_y )
+      appeared_y(t) = 1 if any question in paper y maps to t, else 0
+      avg_marks_t   = mean marks of questions mapped to t (fallback: section
+                      typical marks)
+      prior_t       = syllabus importance prior (unit weight in syllabus, or
+                      1 / total_topics when unknown)
+      emphasis_t    = 1 if student/teacher flagged "important", else 0
+      p_appear_t    = clamp( 0.70*f_t + 0.20*prior_norm_t + 0.10*emphasis_t, 0.02, 0.98 )
+      Small-sample smoothing: if n < 3, blend toward prior:
+        p_appear_t = ( n*p_appear_t + (3-n)*prior_norm_t ) / 3
+      expected_marks_t = p_appear_t * avg_marks_t
+      Repetition patterns: flag topics that appear in ALTERNATE years or every
+      year ("evergreen"); expose as evidence badges.
+
+11.5  EVIDENCE STRINGS (for DP5)
+      Generated from data, not by the LLM. Example:
+      "Appeared in 6 of 8 papers (last: 2024). Average 10 marks. Long-answer."
+
+11.6  CHOICE-RULE HANDLING (exam pattern)
+      For sections with "attempt any k of n": only the best k questions count.
+      Coverage constraint (S12) ensures enough topics are covered to be able
+      to attempt k questions in each section.
+
+11.7  PREDICTED QUESTIONS (R6 uses S11 stats)
+      For each Pass Core topic produce up to 3 predicted question stems in the
+      style of the past papers (type + marks), labeled "Likely question
+      (estimate)". Never claim they will appear.
+
+================================================================================
+[S12] TRIAGE ENGINE ("PASS CORE" ALGORITHM)
+================================================================================
+
+12.1  PURPOSE: Choose which topics to study, at what depth, so that predicted
+      score >= pass mark + safety margin using the time available. This is
+      deterministic code (packages/core/triage.ts). LLM outputs feed only as
+      inputs (topic complexity, mapping), never as the final selection.
+
+12.2  DEFINITIONS
+      Depth levels:
+        L0  micro-prereq (10 min)    : just enough to unlock a dependent topic
+        L1  SURVIVAL (cap 0.55)      : definitions, core formula/steps, one
+                                        example; can score partial marks
+        L2  SOLID    (cap 0.75)      : full explanation + worked example + recall
+        L3  DEEP     (cap 0.90)      : derivations, edge cases, variations
+      Base minutes: L0=10, L1=20, L2=45, L3=90.
+      Student-adjusted minutes:
+        minutes(t,d) = base(d) * complexity_t/3 * (1 - 0.6*m0_t) / speed_factor
+        (clamp to [8, 150])
+      Mastery after study:
+        m1(t,d) = m0_t + (cap(d) - m0_t) * learn_eff      (learn_eff in [0.7,1.1],
+        default 0.9; lowered if source material is poor/absent, raised if student
+        has good grounded notes and high retention)
+        If m0_t >= cap(d): no gain -> skip that depth.
+      Gain:    G(t,d) = p_appear_t * avg_marks_t * ( m1(t,d) - m0_t )
+      Density: rho(t,d) = G(t,d) / minutes(t,d)
+
+12.3  TIME BUDGET
+      T_total   = exam_start - now (minutes)
+      T_fixed   = sleep + meals + travel + personal commitments (from intake)
+      T_buffer  = 12% of (T_total - T_fixed)      (unexpected delays)
+      T_focus   = (T_total - T_fixed - T_buffer) * efficiency
+                  efficiency = focus_span-based factor: 0.75 (short span)
+                  ... 0.90 (long span). Breaks are already part of efficiency.
+      Sleep rule: sleep = 7h default; if T_total < 14h: 6h; if < 10h: 4.5h
+      (3 sleep cycles) with warning; if < 5h: 20-min nap only. Never below
+      these silently. User can override but sees a warning card.
+
+12.4  ALGORITHM (pseudocode)
+
+      INPUT: topics[], stats, m0[], edges, pattern, T_focus, target, twin
+      1. Compute p_appear, avg_marks, expected_marks per topic (S11).
+      2. Compute m0_t = blend(diagnostic result, self-report coverage, twin mastery).
+      3. Build candidate options (t, d) for d in {L1, L2, L3}; compute
+         minutes, gain, density.
+      4. Prerequisite expansion: for each candidate with hard prereq p where
+         m0_p < 0.30, add an L0 option for p and add its minutes to the
+         candidate's cost (bundle).
+      5. PHASE A - Survival sweep (greedy):
+           sort candidates L1 by density desc; pick until T_focus * 0.75 used.
+           enforce COVERAGE: for each section with attempt_k, ensure the picked
+           topics can supply at least k answerable questions (marks-aware).
+           If not met, force-pick the cheapest topics to satisfy coverage.
+      6. Compute predicted score S (12.5). If S >= pass_mark + margin -> go to 7.
+         Else: continue greedy on remaining candidates until time runs out.
+      7. PHASE B - Upgrade: with remaining time, repeatedly upgrade the (t) with
+         highest marginal density (L1->L2, L2->L3) while time remains and
+         S < target_score. Stop when S >= target_score (do not over-study).
+      8. Tag everything not picked as "Skip" with a reason string
+         (low frequency / low marks / high cost / redundant / out of time).
+      9. Classify picked topics: MUST (needed to reach pass), SHOULD (raises
+         margin), NICE (only if time left).
+      10. If S_max (max achievable) < pass_mark: return status=UNREACHABLE with
+          S_max, best plan, and honest message (S03 honesty contract).
+      OUTPUT: selection[{topic, depth, minutes, class, evidence}], S, sigma,
+              pass_confidence, skipped[{topic, reason}], status.
+
+12.5  PREDICTED SCORE AND PASS CONFIDENCE
+      Section-wise expected score:
+        For each section: take the k best expected topic-question values:
+          E_q = p_appear * marks * m_final   (m_final = m1 for picked, m0 else)
+        Sum over the best k (attempt_k) questions.
+      Guess baseline (only if MCQs and NO negative marking):
+        add 0.25 * marks_of_unanswered_mcq * 0.5  (conservative)
+      Predicted score S = sum of section scores (as % of total).
+      Variance per topic: var_t = marks^2 * ( p(1-p)*m^2 + p*0.04 )
+      sigma = sqrt(sum var_t) (percentage points), widened by 1.25x if the
+      diagnostic was skipped, and by 1.4x if no PYQ data (UNVERIFIED topics).
+      Pass Confidence  PC = Phi( (S - pass_mark) / sigma )   (normal CDF)
+      Bands: PC < 0.40 LOW, 0.40-0.70 MEDIUM, 0.70-0.85 GOOD, > 0.85 STRONG.
+      Cap PC at 0.75 when no PYQ data. Display as e.g. "Pass Confidence: 74%
+      (estimate, range 62-84%)".
+
+12.6  EDGE CASES (must be unit tested)
+      - T_focus <= 0 -> Emergency card only, plus "what to do in the last 20 min".
+      - All topics already mastered -> plan = recall + cheat sheet only.
+      - Target > achievable -> return best achievable with honest message.
+      - PYQ missing for some years -> reduce n, smooth to prior.
+      - Topic appears with 30 marks but student m0=0 and cost huge -> still
+        evaluate density; if it is the only route to the pass mark, include at L1.
+      - Duplicate topic titles -> merge before triage.
+      - Multiple exams (V1): run triage per exam then allocate T_focus by
+        marginal density across exams, honoring exam order.
+
+================================================================================
+[S13] RESCUE PLANNER (TIME-BLOCKING ALGORITHM)
+================================================================================
+
+13.1  INPUT: selection from S12, exam_start, now, twin, fixed commitments,
+      sleep rule, mode (S03.2). OUTPUT: ordered plan_blocks with timestamps.
+      Implemented in packages/core/planner.ts (deterministic, seeded).
+
+13.2  BLOCK TYPES
+      WARMUP        3-min "win": 3 easy flashcards from a Must topic (creates
+                    momentum, lowers panic)
+      LEARN         read/watch layered notes at depth d, with a done-condition
+      RECALL        active recall: quiz/flashcards on the just-learned topic
+      BUILD_SHEET   add the topic's essentials to the cheat sheet (student sees it)
+      REVIEW        re-read cheat sheet segment + weak flashcards
+      BREAK         5-15 min (adaptive), includes a suggested micro-activity
+      MEAL          20-30 min, protected
+      SLEEP         protected block
+      FINAL_SWEEP   30-45 min before sleep: cheat sheet pass + mistake items
+      MORNING_CARD  20-40 min on exam morning: panic card + 10 flashcards + exam
+                    strategy (time per mark, which questions first)
+
+13.3  SESSION SHAPE (block length from focus_span)
+      focus <= 20  : 15 min work / 5 min break
+      20 < f <= 35 : 25 / 5
+      f > 35       : 40 / 10
+      Every 4 work blocks: 15-20 min long break.
+      Each LEARN block is followed within 1-3 blocks by its RECALL block.
+
+13.4  ORDERING RULES
+      R1  Start with a WARMUP block (3 min).
+      R2  First real LEARN block = a Must topic that is high-density and
+          low-complexity (early win), unless panic_index is low.
+      R3  Topological order for prerequisites (L0 before dependents).
+      R4  Place highest-complexity topics inside the student's peak window
+          (chronotype/time-of-day accuracy). If exam is tomorrow morning and
+          student is "night" type, hard topics go 7 pm - 11 pm.
+      R5  Interleave: max 2 consecutive blocks of same unit/subject when
+          multiple exist; alternate reading and practice.
+      R6  Spaced passes:
+            Pass 1 (learn)   all selected topics
+            Pass 2 (recall)  after 2-3 blocks, then again ~2-3 h later
+                             for MUST topics (expanding gap)
+            Pass 3 (sweep)   FINAL_SWEEP before sleep; MORNING_CARD on the day
+      R7  Numerical/diagram-heavy topics get RECALL as worked-problem practice,
+          not flashcards.
+      R8  Insert MEAL blocks at typical times (or user-set); keep them fixed.
+      R9  Insert SLEEP as an anchor FIRST, then fill around it (anchors:
+          sleep, meals, exam). Fill the remaining time slots with blocks.
+      R10 Buffer: leave 10-12% unassigned as "floating buffer" blocks the
+          student can use for overflow (visible, named "Catch-up").
+      R11 Never schedule study in the last 30 min before leaving for the exam
+          except MORNING_CARD light review.
+
+13.5  EMERGENCY MODE (T < 4h)
+      Blocks: WARMUP -> Must topics at L1 (top-density only, hard cap 6 topics)
+      -> one combined RECALL -> cheat sheet REVIEW -> "Exam strategy card".
+      No BUILD_SHEET blocks (cheat sheet is auto-built and ready).
+
+13.6  EXTENDED MODE (30-72h)
+      Split T_focus across days weighted 40/35/25 (or as available), Day N-1 gets
+      the STANDARD structure; earlier days use Pass 1 heavy, later Pass 2/3.
+
+13.7  OUTPUT CONTRACT (plan_blocks fields)
+      {seq, type, topic_id?, depth?, start_at, planned_min, done_condition,
+       why, resources?[], flags:["hard","early_win","peak_window"]}
+      done_condition examples:
+        LEARN  "Read the 3-minute note, then tap 'I got it' or ask for a simpler
+                explanation."
+        RECALL "Answer 5 questions; need 3 correct to move on."
+        SLEEP  "Lights out by 23:30."
+
+13.8  VALIDATION (planner self-check before returning)
+      - Total scheduled work minutes <= T_focus.
+      - No overlaps; timestamps monotonic; sleep block intact; meals intact.
+      - Every selected topic has LEARN and RECALL blocks (except Emergency).
+      - Plan ends >= 30 min before exam start.
+      If validation fails -> auto-fix (drop lowest-density NICE topics first),
+      then re-validate; if still failing throw PlannerError (never ship an
+      invalid plan).
+
+13.9  EXAMPLE (STANDARD MODE, exam 9:30 next morning, now 14:00, focus 25 min)
+      14:00 WARMUP (3)              14:03 LEARN topic A L1 (25)
+      14:28 BREAK (5)               14:33 RECALL A (10)
+      14:43 LEARN topic B L2 (25)   ... 
+      17:30 MEAL (30)               ... 
+      21:30 REVIEW cheat sheet + weak cards
+      22:30 FINAL_SWEEP (30)        23:00 lights-out prep
+      23:15 SLEEP -> 06:15          06:45 MORNING_CARD (30)
+      07:30 leave; exam 09:30
+      (The real plan is generated by code; this is an illustration.)
+
+================================================================================
+[S14] CONTENT GENERATION SPECS
+================================================================================
+
+14.1  GROUNDING RULES (apply to all generated content)
+      G1  Use retrieved chunks from the student's documents first (RAG top-k by
+          topic key + embedding). Cite [doc name, p.X].
+      G2  If no grounded source: content is labeled "AI-general" and goes through
+          the Verifier (R13) with a stricter checklist.
+      G3  Exam-relevant only: prioritize what the PYQs test and how (definition,
+          derivation, numerical, diagram, compare-and-contrast).
+      G4  Simple language. Short sentences. Define jargon once. Keep technical
+          terms in English.
+      G5  No invented facts, formulas, dates, or citations. If unsure: omit and
+          flag "verify with your textbook".
+
+14.2  NOTES - THREE LAYERS PER TOPIC
+      L30s  (30-second)  : 1-line definition + 3 bullets + 1 memory hook.
+      L3m   (3-minute)   : plain explanation, one worked example, formula/steps,
+                           a tiny diagram (mermaid/SVG) if useful, "Common
+                           mistakes" (max 3), "How to write this answer" (marks-
+                           aware skeleton), 2 likely questions.
+      DEEP  (optional)   : derivations, variations, edge cases, extra examples.
+      Every note ends with: Sources, Verified badge (if R13 passed), and a
+      "Simplify / Translate / Example" action row.
+
+14.3  CHEAT SHEET SPEC (per subject; A4; 1 page target, 2 max)
+      Sections in fixed order:
+        1. PANIC CARD (top 10 lines to remember if nothing else)
+        2. Formulas and key definitions (grouped by unit)
+        3. Must-remember facts (dates, names, constants, rules)
+        4. Mini diagrams (simplified, labelled)
+        5. Mnemonics and memory hooks
+        6. Answer skeletons: 2-mark / 5-mark / 10-mark structure
+        7. Common traps (from mistakes + PYQ patterns)
+        8. Exam-hall time strategy (minutes per mark, order of attempt)
+      Layout: 2-3 column dense but readable (>= 8.5pt in print), high contrast,
+      unit color-coding, tiny topic-priority stars (Must=3 stars). Two exports:
+      PHONE view (single column, zoomable) and PRINT view (A4 PDF).
+      The sheet GROWS as the student completes BUILD_SHEET blocks, but a full
+      version is available from minute one (auto-built) so the student is never
+      blocked.
+
+14.4  FLASHCARDS
+      Front/back, 1 idea per card, max 25 words each side. Types: definition,
+      formula, why/how, compare, cloze, mini-numerical. Source tags (pyq id).
+      Boxes 1-3 (Leitner-lite for one night): wrong -> box 1 (reshow in 15 min),
+      right -> promote; done when all cards in box 3 or time up.
+
+14.5  QUIZZES
+      Kinds: diagnostic (5 items), recall (per topic 3-6), mock mini (20-30 min,
+      PYQ-style, Pass Core weighted).
+      Item fields: stem, options, answer, rubric (for short answers),
+      misconception_tag, difficulty, marks. Auto-grade: MCQ/numeric exact;
+      short answer via LLM grader with rubric + tolerance, output {score, reason};
+      grader results spot-checked in evals (S23).
+
+14.6  ANSWER TEMPLATES (marks-aware)
+      2 marks : definition + 1 point/example
+      5 marks : intro (1-2 lines) + 3-4 points + diagram/example + conclusion
+      10 marks: intro, structured headings, diagram, example, comparison or
+                application, conclusion. Include "keywords examiners look for".
+
+14.7  EXAM-STRATEGY CARD (MORNING_CARD)
+      Time per mark, order of attempt (easiest + highest expected marks first),
+      what to do if blank (write definitions, draw the diagram - partial marks),
+      how to avoid negative-marking losses, breathing reminder.
+
+================================================================================
+[S15] RUNTIME AGENTS (R-SERIES) - THE AI WORKERS INSIDE THE PRODUCT
+================================================================================
+
+GENERAL AGENT CONTRACT (applies to every R-agent)
+  - Lives in /packages/agents/<id>-<name>/ with prompt.ts, schema.ts, run.ts, eval/.
+  - Input and output are Zod-validated JSON. No free text between agents.
+  - Stateless: all context passed in; results stored in agent_runs.
+  - One job only. If it needs another agent's output, the Orchestrator supplies it.
+  - Must return {status: ok|needs_input|failed, data, warnings[], confidence}.
+  - Never invent facts. If evidence is missing: lower confidence, add a warning.
+  - Tone (any user-visible text): calm, direct, short sentences, no shaming.
+
+----------------------------------------------------------------------------
+R0  ORCHESTRATOR ("Conductor")
+----------------------------------------------------------------------------
+  Mission   Run the correct agent graph for each user action and keep state.
+  Trigger   Any API action: start_rescue, upload_done, diagnostic_done,
+            block_done, quiz_done, panic, replan, finish_session.
+  Inputs    session state, user action, twin snapshot.
+  Outputs   next state, job list, UI events (SSE).
+  Logic     Finite-state machine (S17). Fans out independent agents in parallel
+            (e.g. R6 notes for topics 1..n). Retries once on failure; degrades
+            gracefully (e.g., skip verification -> mark unverified).
+  Rules     Owns cost/time budgets; enforces progressive delivery; writes
+            agent_runs rows; never generates content itself.
+  KPIs      p95 end-to-end latency (S05.4), failure rate < 2%, no orphan jobs.
+
+----------------------------------------------------------------------------
+R1  STUDENT PROFILER
+----------------------------------------------------------------------------
+  Mission   Turn intake answers + behavior check + diagnostic results into a
+            Learning Twin snapshot and initial mastery map.
+  Inputs    intake form, 8 behavior answers, diagnostic attempts, prior twin.
+  Outputs   twin_metrics (S09), m0 per topic, panic_index, target confirmation,
+            warnings (e.g. "diagnostic skipped -> wider uncertainty").
+  Tools     packages/core/twin.ts (math). LLM only for free-text goals/notes.
+  Rules     Day-1 priors are self-report; label as "self-reported". Prefer
+            observed data when n >= 3 sessions. Never label a student
+            permanently ("weak"); use "currently".
+  KPIs      Twin metrics stable across reruns (deterministic), no null fields.
+
+----------------------------------------------------------------------------
+R2  DOCUMENT INGESTION AGENT
+----------------------------------------------------------------------------
+  Mission   Parse any uploaded material into clean, page-cited chunks.
+  Inputs    file(s) in storage.
+  Outputs   documents row (kind, meta), pages[], chunks[] with embeddings,
+            quality report (bad pages, ocr_conf).
+  Tools     pdfjs, Tesseract, vision LLM, chunker, embedder.
+  Rules     Follow S10 exactly. Idempotent by sha256. Never drop pages silently.
+            Surface unreadable pages. Store page numbers for every chunk.
+  Failure   Encrypted/blurry/huge handled per S10.5.
+  KPIs      >= 95% text recall on clean PDFs; >= 85% on phone photos;
+            < 45 s for 30 pages.
+
+----------------------------------------------------------------------------
+R3  SYLLABUS AND EXAM-PATTERN ANALYST
+----------------------------------------------------------------------------
+  Mission   Build the topic tree, exam pattern, and PYQ mapping (S11).
+  Inputs    chunks (syllabus/PYQ/notes), curricula library, user hints.
+  Outputs   topics[], topic_edges[], pattern{sections, marks, choice rules},
+            pyq_questions[] with topic mapping + confidence.
+  Model     FAST for per-question mapping, STRONG for tree consolidation.
+  Rules     Canonicalize topic keys; merge duplicates; flag low-confidence
+            mappings; ask the student to confirm at most 3 things
+            ("needs_input") and only when it changes a top-10 topic.
+            Never fabricate PYQ years or marks.
+  KPIs      Topic mapping accuracy >= 85% on golden PYQ set (S23);
+            zero fabricated questions.
+
+----------------------------------------------------------------------------
+R4  TRIAGE AGENT ("Pass Core Strategist")
+----------------------------------------------------------------------------
+  Mission   Run S12 and explain the result to the student.
+  Inputs    topic_stats, m0, twin, exam target, T_focus.
+  Outputs   selection[], skipped[], S, sigma, pass_confidence, status, and
+            one-line WHY strings per topic (built from data, S11.5).
+  Tools     packages/core/triage.ts (deterministic).  LLM only to phrase the
+            summary message (calm, honest).
+  Rules     The code decides; the LLM only phrases. Honesty contract (S03.7).
+            If UNREACHABLE: present best achievable + safest fallback.
+  KPIs      Same input -> same output (deterministic). Unit tests pass.
+
+----------------------------------------------------------------------------
+R5  RESCUE PLANNER
+----------------------------------------------------------------------------
+  Mission   Turn selection into timestamped plan_blocks (S13) and replans (S18).
+  Inputs    selection, twin, exam_start, now, fixed commitments, sleep rule.
+  Outputs   plan_blocks[] (versioned), plan summary, floating buffer, warnings.
+  Tools     packages/core/planner.ts, replan.ts (deterministic) + validation.
+  Rules     Sleep anchor first. Validation must pass (S13.8). Writes a
+            "why this changed" note on every replan.
+  KPIs      0 invalid plans shipped; replan < 3 s.
+
+----------------------------------------------------------------------------
+R6  NOTES WRITER
+----------------------------------------------------------------------------
+  Mission   Write the 3-layer notes (S14.2) for each selected topic.
+  Inputs    topic, depth, retrieved chunks, PYQ questions for that topic, twin
+            preferences (examples-first / practice-first), language pref.
+  Outputs   notes rows (L30s, L3m, DEEP), diagram code, likely questions,
+            citations [{doc,page}].
+  Model     STRONG. Runs in parallel per topic; streams to UI.
+  Rules     G1-G5 (S14.1). Simple language. Include "how to write this answer".
+            No fabricated citations. Match depth to L1/L2/L3.
+  KPIs      Faithfulness >= 95% vs source (eval), reading time matches plan.
+
+----------------------------------------------------------------------------
+R7  CHEAT SHEET DESIGNER
+----------------------------------------------------------------------------
+  Mission   Compress notes + stats + mistakes into the cheat sheet (S14.3).
+  Inputs    notes L30s/L3m, selection priorities, mistakes, PYQ patterns.
+  Outputs   cheat_sheets.content JSON (sections), HTML, PDF via worker.
+  Rules     Fixed section order. Fit 1 page (2 max): if overflow, cut NICE first,
+            then compress wording; never reduce font below 8.5pt. Include
+            PANIC CARD. Priority stars from triage. Every formula/fact must come
+            from a verified note.
+  KPIs      Fits target pages; 0 unverified formulas; readable on phone.
+
+----------------------------------------------------------------------------
+R8  RESOURCE DISCOVERY AGENT   (MVP-lite, V1 full)
+----------------------------------------------------------------------------
+  Mission   Find the best 1-2 external resources per hard topic for THIS student.
+  Inputs    topic, twin.prefers, level, time budget, language.
+  Outputs   resources[] {url, title, type, duration, why-for-this-student}.
+  Tools     web search API, approved-source list, resource graph (V1).
+  Rules     MVP: only from a curated allowlist (official docs, well-known
+            edu channels) and the student's own uploads. Discover -> classify
+            -> validate -> rank (difficulty, quality, recency, hands-on,
+            accuracy, prerequisites). Prefer <= 10-minute resources in Rescue
+            Mode. Never recommend unvetted links. Never scrape paywalled data.
+  KPIs      Relevance >= 4/5 on human spot check; 0 dead links.
+
+----------------------------------------------------------------------------
+R9  TUTOR / EXPLAINER
+----------------------------------------------------------------------------
+  Mission   Answer "I don't get this" quickly, grounded on the notes.
+  Inputs    student question, current topic, note context, language pref.
+  Outputs   short explanation (<= 120 words), example, optional analogy,
+            follow-up micro-check question.
+  Modes     Simplify / Translate paragraph / Give example / Explain like I'm 12 /
+            Why is this important for the exam?
+  Rules     Stay within the topic. Use the student's language style. Keep
+            technical terms in English with translation in brackets. If asked
+            something off-syllabus: answer briefly, then return to plan.
+            No lectures during Panic Mode (max 60 words).
+  KPIs      Median response < 4 s; student "helpful" rate >= 80%.
+
+----------------------------------------------------------------------------
+R10 QUIZ AND MOCK MAKER (+ GRADER)
+----------------------------------------------------------------------------
+  Mission   Create diagnostic, recall and mini-mock items and grade answers.
+  Inputs    topic, depth, PYQ style, mastery, misconception library.
+  Outputs   quiz_items (stem, options, answer, rubric, misconception_tag,
+            difficulty, marks) and grading results {score, reason, error_type}.
+  Rules     PYQ-style wording. One concept per item. Distractors based on common
+            misconceptions. Grader uses rubric + partial credit; for numeric,
+            accept equivalent forms. Ambiguous grade -> mark "needs review" and
+            be lenient. Time-box quizzes.
+  KPIs      Grader agreement with human >= 90% (S23); no ambiguous MCQs.
+
+----------------------------------------------------------------------------
+R11 MISTAKE INTELLIGENCE
+----------------------------------------------------------------------------
+  Mission   Explain WHY a student erred and generate the smallest fix.
+  Inputs    attempt, question, correct answer, topic graph.
+  Outputs   error_type (concept|recall|careless|calculation|misread|time),
+            explanation (2 lines), related topics, correction micro-path
+            (<= 3 steps, <= 10 min), 2 fresh practice items.
+  Rules     Do not overdiagnose from one error: require >= 2 similar errors to
+            label a "pattern". In Rescue Mode, corrections must fit in the plan
+            (insert at most one remedial block per topic, S18).
+  KPIs      Error-type agreement with human >= 80%.
+
+----------------------------------------------------------------------------
+R12 LEARNING TWIN UPDATER
+----------------------------------------------------------------------------
+  Mission   Update and version the Twin from events and outcomes (S09.5).
+  Inputs    events, attempts, block completions, session summary.
+  Outputs   new twin version, deltas ("focus span 22 -> 26 min").
+  Tools     packages/core/twin.ts. Runs at session end and after each block
+            (lightweight).
+  Rules     EMA alpha 0.3; never delete history; expose to the user (S24).
+
+----------------------------------------------------------------------------
+R13 VERIFIER / FACT-CHECKER
+----------------------------------------------------------------------------
+  Mission   Stop hallucinations before content reaches the student.
+  Inputs    generated notes/cheat sheet/quiz + the retrieved source chunks.
+  Outputs   pass/fail per claim, corrections, verified=true/false.
+  Checks    (1) each factual claim supported by a chunk or flagged AI-general,
+            (2) formulas dimensionally and symbolically sane, (3) numbers/dates
+            match sources, (4) quiz answers actually correct (solve independently),
+            (5) no contradictions across notes and cheat sheet.
+  Rules     Different model call than the writer; STRONG tier; "when in doubt,
+            flag and remove from the cheat sheet".
+  KPIs      Catches >= 90% of seeded errors in eval (S23).
+
+----------------------------------------------------------------------------
+R14 CALM COACH (ANTI-OVERWHELM AGENT)
+----------------------------------------------------------------------------
+  Mission   Keep the student steady and moving.
+  Trigger   Panic button, high panic_index, long idle, repeated skips, low
+            confidence, late-night dip.
+  Outputs   UI simplification flags, short supportive line, 60-sec breathing or
+            reset block, "smallest next step".
+  Rules     Never medical claims. No toxic positivity. Short. Offers
+            "Pass Core only" view. If the student expresses serious distress
+            or self-harm thoughts: stop the study flow, respond with care, and
+            surface local helpline/support resources (S24).
+  KPIs      Panic-to-next-action time < 60 s; user rating >= 4/5.
+
+================================================================================
+[S16] BUILD AGENTS (B-SERIES) - THE AI CODING TEAM
+================================================================================
+
+BUILD WORKING PROTOCOL (all B-agents)
+  1. Read agent.md. Read only the sections listed for your role below.
+  2. Work in your owned directories only. Need a change elsewhere? Open a note
+     in /docs/handoffs/<from>-to-<to>.md with the exact contract needed.
+  3. Contracts first: schemas (packages/schemas) and API (S20) before code.
+  4. Write tests with the code. A task without tests is not done.
+  5. Small commits; keep the app runnable on main at all times.
+  6. Log any deviation in /docs/decisions.md (date, decision, reason).
+
+----------------------------------------------------------------------------
+B0  ARCHITECT / TECH LEAD
+----------------------------------------------------------------------------
+  Reads      S00-S07, S17, S24, S25, S27
+  Owns       /docs, repo scaffolding, CI, decision log, contracts review
+  Deliver    monorepo scaffold, tsconfig/eslint/prettier, CI (lint+test+build),
+             .env.example, docs/decisions.md, module boundary rules
+  Done when  fresh clone -> `pnpm i && pnpm dev` runs; CI green; boundaries
+             enforced (core has no IO imports).
+
+B1  DATABASE AND BACKEND AGENT
+  Reads      S05, S08, S17, S20, S24
+  Owns       /supabase, /apps/web/app/api, /apps/worker (job runner only)
+  Deliver    migrations for all S08 tables, RLS policies, storage buckets,
+             seed scripts, API route handlers with Zod validation, SSE progress,
+             job queue with locking/retries, cost guard
+  Done when  all endpoints in S20 pass contract tests; RLS test proves user A
+             cannot read user B; jobs survive worker restart.
+
+B2  AI AND PROMPT ENGINEER
+  Reads      S09-S15, S17-S19, S23
+  Owns       /packages/agents, /packages/llm, /evals
+  Deliver    R0-R14 implementations, provider abstraction, JSON repair, token
+             accounting, prompts per S19, eval sets and scripts
+  Done when  each agent meets its KPI in evals; prompts versioned in
+             docs/prompts-changelog.md; invalid-JSON rate < 1%.
+
+B3  CORE LOGIC ENGINEER (DETERMINISTIC MATH)
+  Reads      S09, S11, S12, S13, S18
+  Owns       /packages/core
+  Deliver    scoring.ts, triage.ts, planner.ts, replan.ts, twin.ts + exhaustive
+             unit and property tests (edge cases in S12.6, validation in S13.8)
+  Done when  100% of listed edge cases tested; deterministic snapshots; planner
+             never emits an invalid plan across 1,000 randomized inputs.
+
+B4  INGESTION ENGINEER
+  Reads      S10, S11, S08 (documents, chunks, topics, pyq tables)
+  Owns       /packages/ingest
+  Deliver    parsers, OCR router, cleaner, chunker (question-aware for PYQ),
+             embedder, topic normalizer, quality gate, idempotency
+  Done when  golden PDFs/photos in /evals/ingest meet S15 R2 KPIs; failure
+             table S10.5 behaviors verified.
+
+B5  FRONTEND ENGINEER
+  Reads      S03, S13 (outputs), S18, S20, S21, S22
+  Owns       /apps/web (app, components, lib), PWA config
+  Deliver    all screens in S21, streaming UI, offline cache, per-paragraph
+             translate/simplify, notes reader, cheat sheet viewer, quiz runner,
+             Panic Mode UI, timeline
+  Done when  Lighthouse mobile >= 90 (perf, a11y); works offline after plan
+             load; passes accessibility checklist.
+
+B6  UX AND DESIGN SYSTEM AGENT
+  Reads      S02, S03.5, S14.3, S21
+  Owns       /apps/web/components/ui, design tokens, copywriting
+  Deliver    calm design system (palette, type scale, spacing), Now/Next/Later
+             pattern, panic-safe layouts, print stylesheet for cheat sheet,
+             microcopy library (tone rules S02.3)
+  Done when  5 usability tests with students: task completion >= 90%, "felt
+             overwhelmed" <= 1/5.
+
+B7  QA AND EVAL AGENT
+  Reads      S12.6, S13.8, S23, S27
+  Owns       /evals, e2e tests, load tests
+  Deliver    Playwright e2e for full rescue flow, agent eval harness, golden
+             datasets (PYQs, syllabi, photos), regression dashboard
+  Done when  CI blocks merges on eval regression; e2e passes on mobile viewport.
+
+B8  DEVOPS, SECURITY AND DEMO AGENT
+  Reads      S06, S24, S25, S26
+  Owns       deployment, secrets, monitoring, seed/demo data, pitch assets
+  Deliver    Vercel + Supabase + worker deploy, rate limits, upload scanning
+             hook, backups, demo seed (Anu vs Rahul), demo script rehearsal
+             checklist, fallback recorded demo
+  Done when  one-click deploy; demo runs 3x in a row with no manual fixes.
+
+BUILD DEPENDENCY ORDER
+  B0 -> (B1, B3, B6 in parallel) -> B4 -> B2 -> B5 -> B7 -> B8
+  Contracts (schemas + API) are frozen at the end of Phase 1 (S25).
+
+================================================================================
+[S17] END-TO-END WORKFLOW AND STATE MACHINE
+================================================================================
+
+17.1  SESSION STATES (rescue_sessions.state)
+      CREATED -> INTAKE -> UPLOADING -> INGESTING -> ANALYZING -> DIAGNOSING ->
+      TRIAGED -> PLANNED -> GENERATING -> ACTIVE -> (REPLANNING <-> ACTIVE) ->
+      WRAPUP -> DONE
+      Side states: NEEDS_INPUT (student must confirm something), FAILED (with
+      retry), PANIC (overlay, returns to ACTIVE).
+
+17.2  STEP-BY-STEP FLOW (STANDARD MODE)
+
+  STEP 1  INTAKE (student, ~60 s)
+          Form: exam/subject, date+time, hours available, target, sleep window,
+          fixed commitments. Language preference.
+          Orchestrator: create exam + session. State INTAKE.
+
+  STEP 2  UPLOAD (student, ~30-90 s)
+          Drag/drop or camera capture: syllabus, PYQs, notes. Or "I don't have
+          any" (fallback S10.3). State UPLOADING -> INGESTING.
+          R2 runs per document in parallel; progress via SSE.
+
+  STEP 3  BEHAVIOR CHECK (student, runs WHILE ingestion happens; ~90 s)
+          The 8 questions (S09.2). Hides ingestion latency.
+          R1 produces twin snapshot.
+
+  STEP 4  ANALYZE (system, ~30-40 s)
+          R3 builds topics, pattern, PYQ mapping. Stats computed (S11).
+          If needs_input: show max 3 one-tap confirmations.
+
+  STEP 5  MICRO-DIAGNOSTIC (student, ~3 min, skippable)
+          R10 creates 5 items from top expected-marks topics. R1 updates m0.
+          State DIAGNOSING.
+
+  STEP 6  TRIAGE (system, < 5 s)
+          R4 runs S12 -> Pass Core, skipped list, Pass Confidence.
+          Student sees O1 summary and can adjust target or "I have +1 hour".
+
+  STEP 7  PLAN (system, < 10 s)
+          R5 builds plan (S13). State PLANNED. Student sees Now/Next/Later.
+          Student taps "Start".
+
+  STEP 8  GENERATE (system, parallel, progressive)
+          For selection order: R6 notes (parallel per topic) -> R13 verify ->
+          R10 flashcards/quizzes -> R7 cheat sheet (auto-built early, then
+          refined) -> worker PDF export. First block's notes must be ready
+          before block 1 begins; the rest stream in.
+          State GENERATING -> ACTIVE (as soon as block 1 is ready).
+
+  STEP 9  ACTIVE LOOP (student + system)
+          For each block: show task -> student does it -> "Done" -> RECALL quiz
+          -> R10 grade -> R11 mistakes -> R12 twin update -> R5 replan if
+          needed (S18) -> next block. Confidence meter updates live.
+
+  STEP 10 FINAL SWEEP + MORNING CARD
+          Cheat sheet pass, weak items, exam strategy card, sleep prompt
+          ("Sleep is part of the plan. Lights out by 23:15.").
+
+  STEP 11 WRAPUP (post-exam, next day)
+          Ask: "What came? Which topics? How did it feel?" Upload questions
+          (optional). R12 updates twin; PYQ database enriched (with consent).
+          Show "What worked / what to change next time".
+
+17.3  PARALLELISM MAP
+      [Upload ingestion] || [Behavior check]  -> join at ANALYZE
+      [Notes per topic]  || [Flashcards]      -> join at CHEAT SHEET REFINE
+      [PDF export] runs after cheat sheet content stable, non-blocking.
+
+17.4  ERROR RECOVERY
+      Any agent failure: retry once; if still failing, degrade:
+        R6 fails -> show retrieved source snippets + "AI-general" summary.
+        R13 fails -> ship content marked "unverified".
+        R10 fails -> flashcards from PYQ text directly.
+        R2 OCR fails -> ask for pasted text.
+      Student is always told in plain words; the plan never stops.
+
+================================================================================
+[S18] LIVE ADAPTATION AND PANIC MODE
+================================================================================
+
+18.1  REPLAN TRIGGERS (deterministic rules in packages/core/replan.ts)
+      T1  Cumulative overrun > 20% of planned work minutes.
+      T2  RECALL score < 50% on a MUST topic.
+      T3  Student skips >= 2 consecutive blocks.
+      T4  Student adds/removes time ("I have 1 more hour", "I must leave at 6").
+      T5  Idle > 30 min in an ACTIVE block (silent shift, gentle nudge at 15 min).
+      T6  Student marks topic "I already know this" AND passes a 3-item check.
+      T7  Panic Mode activated.
+
+18.2  REPLAN RULES
+      - Recompute T_focus from NOW. Recompute m0 from latest attempts.
+      - Re-run triage with updated m0 and remaining time. Keep completed blocks.
+      - Downgrade order when time is short: NICE dropped -> SHOULD L2->L1 ->
+        SHOULD dropped -> MUST L2->L1. MUST topics are never dropped unless
+        status becomes UNREACHABLE (then explain honestly).
+      - T2 handling: insert at most ONE remedial block (R11 correction path,
+        <= 10 min) for that topic; if it fails again, mark "cheat-sheet-only"
+        (student reads the L30s note + flashcards) and move on.
+      - Sleep and meals are immutable unless the user overrides with a warning.
+      - Every replan creates plan_version+1 with a human-readable reason
+        ("Recalculated: you finished DBMS faster than planned").
+
+18.3  PANIC MODE (button always visible)
+      UI: collapse to single card; hide timeline; Pass Core count only.
+      Sequence:
+        1. 60-second breathing/reset block (skippable).
+        2. Show ONE smallest next step (a 5-minute task from a MUST topic).
+        3. Offer "Pass Core only" plan (drops SHOULD/NICE).
+        4. Calm copy from R14. Log panic_pressed (feeds panic_index).
+      Exit: student completes the small step -> return to ACTIVE with a
+      compressed plan.
+
+18.4  CONFIDENCE METER
+      After each RECALL: update m for the topic (Bayesian-like: m_new =
+      0.6*observed + 0.4*m_prior, bounded by depth cap), recompute S and PC.
+      Never show a sudden large drop without explanation; show "why".
+
+18.5  SLEEP GUARD
+      If user tries to delete the sleep block: show evidence-based message
+      ("Sleep helps memory stick. We removed 2 low-value topics instead."),
+      offer "keep sleep" as default action. Allow override once, with a warning.
+
+================================================================================
+[S19] PROMPT LIBRARY (SKELETONS; B2 refines and versions them)
+================================================================================
+
+GLOBAL SYSTEM PREAMBLE (prepend to every runtime agent prompt)
+  "You are one specialist inside a study-rescue system for students under time
+   pressure. Be accurate, calm and concise. Use only the provided sources when
+   they exist and cite them as [doc, p.X]. If a fact is not in the sources,
+   either omit it or label it AI-general. Never invent formulas, dates,
+   questions or citations. Return ONLY valid JSON matching the schema."
+
+P-R2 CLASSIFIER
+  Task: Classify this document (syllabus|pyq|notes|textbook|other) and extract
+  meta (year, exam, paper_code, total_marks, sections). Input: first 3 pages.
+  Output schema: {kind, meta:{year?,exam?,paper_code?,total_marks?,sections?[]},
+  confidence}. If unsure: kind="other", confidence<0.5.
+
+P-R3 TOPIC TREE BUILDER
+  Task: From syllabus text, produce a topic tree: units -> topics -> subtopics.
+  For each topic: title, unit, complexity 1-5 (with one-line reason), hard
+  prerequisites (by title). Merge duplicates. Do not add topics not in the
+  syllabus unless flagged inferred=true.
+  Output: {topics:[{key,title,unit,complexity,prereqs[],inferred}]}.
+
+P-R3 PYQ MAPPER
+  Task: For each question below, return marks, q_type, section, and 1-3 topic
+  keys from the provided topic list with a confidence 0-1. If no topic fits,
+  return topic_keys=[] and note. Do not rewrite the question.
+  Output: {questions:[{q_number,marks,q_type,section,topic_keys[],confidence}]}.
+
+P-R4 TRIAGE SUMMARY (phrasing only; numbers come from code)
+  Task: Write a calm 3-sentence summary of this plan for a student with X hours
+  left. State Pass Confidence and range exactly as provided. Mention 3 Must
+  topics and 1 thing we are skipping and why. If status=UNREACHABLE, be honest,
+  kind and practical. No promises of guaranteed results.
+
+P-R6 NOTES WRITER
+  Task: Write notes for topic {title} at depth {L1|L2|L3} using ONLY the source
+  excerpts. Produce L30s, L3m (explanation, worked example, steps/formula,
+  common mistakes <=3, how-to-write-answer for {marks} marks, 2 likely
+  questions) and optional DEEP. Simple English, short sentences. Student
+  prefers {examples|practice|reading}. Cite sources. If sources are thin,
+  say so in warnings and mark ai_general=true for unsupported parts.
+  Output: {l30s, l3m:{...}, deep?, diagram_mermaid?, citations[], warnings[]}.
+
+P-R7 CHEAT SHEET COMPOSER
+  Task: Compose the cheat sheet in the fixed section order (S14.3) from the
+  verified notes. Hard limit: {pages} page(s). Priority order = triage classes.
+  Cut NICE first. Keep each formula exactly as in notes (copy, don't rewrite).
+  Output: {sections:[{title,items:[{text,priority,topic_key}]}], overflow_cut[]}.
+
+P-R9 TUTOR
+  Task: The student is confused about: "{question}". Current topic: {topic}.
+  Answer in <= 120 words (<= 60 in Panic Mode), simple words, one example,
+  then ask one tiny check question. Language: {lang}, keep technical terms in
+  English. Stay grounded on the notes.
+
+P-R10 QUIZ MAKER
+  Task: Create {n} PYQ-style items for {topic} at difficulty {d}. Each item:
+  stem, options (MCQ) or model answer + rubric (short), correct answer,
+  misconception_tag for each wrong option, marks. One concept per item. No
+  trick wording. Do not repeat these existing items: {existing}.
+
+P-R10 GRADER
+  Task: Grade the response using the rubric. Give score 0..marks, a 1-line
+  reason, and error_type if wrong. Accept equivalent phrasing and units. If
+  ambiguous, be lenient and set needs_review=true.
+
+P-R11 MISTAKE ANALYZER
+  Task: Given question, correct answer, student answer, and topic graph,
+  classify error_type, explain in <= 2 lines, list related topics, propose a
+  correction path (<= 3 steps, <= 10 min total) and 2 practice items.
+
+P-R13 VERIFIER
+  Task: Check every claim in the content against the excerpts. For each
+  claim: supported | unsupported | contradicted, with the excerpt id. Solve
+  each quiz item independently and compare with the given answer. Check
+  formulas for symbolic consistency. Output failures with corrections.
+  Be strict: unsupported facts must be removed or labeled AI-general.
+
+P-R14 CALM COACH
+  Task: The student pressed panic / seems overwhelmed. Write <= 25 words:
+  acknowledge, reduce the task to one small step, no shaming, no medical
+  claims. Output {message, suggested_action}.
+
+PROMPT RULES
+  - Version every prompt (semver) in docs/prompts-changelog.md.
+  - Store prompt_version in agent_runs.
+  - Keep few-shot examples in /packages/agents/<id>/examples.
+  - Temperature: extraction/grading 0-0.2; notes 0.3; quiz creation 0.5.
+
+================================================================================
+[S20] API CONTRACT (REST + SSE; all bodies validated by Zod)
+================================================================================
+
+  Auth: Supabase JWT in Authorization header. All routes require auth except
+  /health. Rate limits: 60 req/min/user; upload 10/min.
+
+  POST /api/exams                  create exam {title, subject, domain, board,
+                                   exam_start, duration_min, target, pattern?}
+  POST /api/sessions               start rescue session {exam_id, mode?}
+  GET  /api/sessions/:id           state + summary (pass_confidence etc.)
+  POST /api/uploads/sign           get signed upload URL {exam_id, kind, mime}
+  POST /api/uploads/complete       {document_id} -> enqueue ingestion
+  GET  /api/sessions/:id/events    SSE stream of progress + UI events
+  POST /api/behavior               {session_id, answers[8]} -> R1
+  GET  /api/sessions/:id/topics    topic list with stats and evidence strings
+  POST /api/topics/:id/confirm     student confirms/edits a topic mapping
+  POST /api/diagnostic/start       -> quiz (5 items)
+  POST /api/attempts               {quiz_item_id, response, time_ms, hints,
+                                   confidence_self} -> graded result
+  POST /api/sessions/:id/triage    run triage; returns selection + PC
+  POST /api/sessions/:id/plan      build plan (versioned)
+  GET  /api/sessions/:id/plan      current plan (+ ?version=)
+  POST /api/blocks/:id/start|done|skip   block lifecycle events
+  POST /api/sessions/:id/adjust    {extra_minutes?, leave_at?, target?}
+  POST /api/sessions/:id/panic     enter Panic Mode -> compressed plan
+  GET  /api/topics/:id/notes?layer=L30s|L3m|DEEP&lang=en|ml|hi
+  POST /api/notes/:id/transform    {action: simplify|translate|example, text,
+                                   lang} -> R9
+  GET  /api/sessions/:id/cheatsheet    JSON + html
+  POST /api/sessions/:id/cheatsheet/export   -> PDF signed URL (async)
+  GET  /api/sessions/:id/flashcards?due=1
+  POST /api/flashcards/:id/review  {result: right|wrong}
+  POST /api/tutor                  {topic_id, question, mode} -> stream
+  POST /api/sessions/:id/wrapup    post-exam feedback
+  GET  /api/twin                   view Learning Twin
+  DELETE /api/twin                 reset Twin
+  GET  /api/health
+
+  Error format: {error:{code, message_user, message_dev, retryable}}.
+  Every mutation is idempotent via Idempotency-Key header.
+
+================================================================================
+[S21] FRONTEND / UX SPECIFICATION
+================================================================================
+
+21.1  ROUTES
+      /                       landing (pitch, "I have an exam tomorrow" CTA)
+      /rescue/new             intake wizard (step 1 of 4)
+      /rescue/[id]/upload     upload + behavior check side by side
+      /rescue/[id]/confirm    topic confirmations (only if needed)
+      /rescue/[id]/diagnostic 5-question warm-up
+      /rescue/[id]/plan       summary + Now/Next/Later
+      /rescue/[id]/study      active block runner (notes / quiz / cards)
+      /rescue/[id]/cheatsheet viewer + export
+      /rescue/[id]/wrapup     post-exam feedback
+      /twin                   "My Learning Twin"
+      /explore, /path         V1 modules (S22)
+      /settings               language, data, privacy
+
+21.2  WIREFRAMES (ASCII)
+
+  A) PLAN SUMMARY (O1)
+    +--------------------------------------------------+
+    |  Exam: DBMS  -  tomorrow 9:30 AM  -  14h 20m left |
+    |  Pass Confidence: 74%   (range 62-84%)  [why?]    |
+    |  ###########-----                                 |
+    |  We'll cover 9 Pass Core topics in 6h 40m.        |
+    |  Sleep protected: 23:15 - 06:15                   |
+    |  Skipping 6 low-value topics [see why]            |
+    |  [ Start my plan ]                                |
+    +--------------------------------------------------+
+
+  B) NOW / NEXT / LATER
+    +--------------------------------------------------+
+    |  NOW      Normalization (L2)          25:00       |
+    |           Read the 3-min note, then tap I got it  |
+    |           [ Open note ]                           |
+    |  NEXT     Break 5 min  ->  Recall quiz (10 min)   |
+    |  LATER    3 more topics, meal, final sweep [view] |
+    |  Progress ring 3/9   Pass Confidence 74% -> 77%   |
+    |  [ I'm panicking ]  (always visible, bottom)      |
+    +--------------------------------------------------+
+
+  C) NOTE READER
+    +--------------------------------------------------+
+    | Normalization         [30s | 3 min | Deep]       |
+    | Paragraph text ....................................|
+    |   [Translate ml] [Simplify] [Example]              |
+    | Common mistakes (3)   How to write this (5 marks) |
+    | Sources: your_notes.pdf p.12                       |
+    | [ Add to cheat sheet ]   [ I got it ]             |
+    +--------------------------------------------------+
+
+  D) CHEAT SHEET VIEWER
+    Tabs: [Panic card] [Formulas] [Facts] [Diagrams] [Answers] [Traps]
+    Buttons: [Phone view] [Print view] [Download PDF] [Read aloud (V1)]
+
+21.3  INTERACTION RULES
+      - Max 3 tasks visible; timeline collapsed by default.
+      - Buttons >= 44px; bottom-anchored primary action for thumb reach.
+      - Skeleton loaders + staged progress text during ingestion (never blank).
+      - Explain every priority with the evidence string on tap.
+      - Confidence changes animate slowly and show the driver ("+3%: Recall on
+        Normalization 4/5").
+      - Dark mode default at night hours; adjustable.
+      - Keyboard + screen reader accessible; color is never the only signal.
+      - Offline banner: "Working offline - your plan is saved."
+      - Copy tone per S02.3; no exclamation spam, no guilt.
+
+21.4  OFFLINE/PWA
+      Cache on plan load: plan_blocks, notes (L30s/L3m for Pass Core), cheat
+      sheet HTML + PDF, flashcards, quizzes. Queue attempts/events in IndexedDB
+      and sync when online. Tutor/translate require network (show a clear hint).
+
+21.5  ACCESSIBILITY AND INCLUSION
+      WCAG AA, dyslexia-friendly font option, adjustable text size, low-
+      bandwidth mode (no images, text-first), Malayalam/Hindi fonts loaded lazily.
+
+================================================================================
+[S22] SUPPORTING MODULES (LAYER B - PLATFORM)
+================================================================================
+
+22.1  ADAPTIVE LEARNING PATH (V1)
+      Student -> understands student -> finds resources -> builds roadmap ->
+      observes -> adapts -> evaluates -> rebuilds. Graph of skills with
+      prerequisites; recompute after each assessment. Primary goal +
+      temporary "Explore" topics that never overwrite the main roadmap;
+      "Return to my roadmap" restores state.
+
+22.2  TIME ENGINE (long-term)
+      Given goal + days + hours/day: compute required hours vs available;
+      prioritize essentials; push advanced topics to post-goal roadmap;
+      honest about the gap. (Rescue Mode is the extreme, T <= 72h case.)
+
+22.3  RESOURCE DISCOVERY ENGINE (V1)
+      Learning Resource Graph. Pipeline: discover -> classify -> validate ->
+      rank -> recommend. Ranking features: difficulty fit, quality, recency,
+      hands-on, community feedback, accuracy, prerequisites, student ability.
+      Every recommendation explains "why this for you".
+
+22.4  COMMUNITY RESOURCES + REPUTATION (V1)
+      Submission -> AI checks (relevance, accuracy, credibility, malicious
+      content, duplicates, difficulty, freshness) -> human/community
+      verification -> resource graph. Do NOT let AI alone decide.
+      Contributor reputation = accepted ratio, community rating, accuracy
+      reports, longevity. Anti-abuse: rate limits, link scanning, shadow-ban.
+
+22.5  MISTAKE INTELLIGENCE (MVP-lite in Rescue, full in V1)
+      See R11. Turns mistakes into correction paths and updates the Twin.
+
+22.6  GAMIFIED QUEST MAP (V1)
+      Milestones unlock the next area; adaptive gating ("You're ready, but your
+      HTTP analysis score is 54% - try this optional challenge"). Badges never
+      shame; streaks are optional and forgiving.
+
+22.7  PERSONAL KNOWLEDGE BASE + WEEKLY REVISION (V1)
+      "My Knowledge": per concept - what I learned, my mistakes, key ideas, my
+      notes, resources, last reviewed. Weekly digest: forgotten concepts,
+      15-min revision plan. Spaced repetition scheduler.
+
+22.8  PER-PARAGRAPH TRANSLATION (MVP)
+      English is default. Each paragraph has [Translate] -> language of choice
+      (Malayalam, Hindi, Tamil...), [Simplify English], [Example]. Keep
+      technical terms in English with the translation in brackets. Cache
+      translations per paragraph hash. Flag "machine translated".
+
+22.9  NAME/POSITIONING NOTE
+      Candidate names: SkillOS, PathMind, LearnTwin, AdaptIQ, Mentora, PathOS.
+      Recommended: SkillOS - "Your AI-powered personal learning operating
+      system." Flagship mode label: "Exam Eve Rescue".
+
+================================================================================
+[S23] QUALITY, EVALS, TESTING
+================================================================================
+
+23.1  TEST PYRAMID
+      Unit (packages/core, schemas)  -> exhaustive, deterministic
+      Integration (API + DB + RLS)   -> contract tests
+      Agent evals (/evals)           -> golden datasets, scored
+      E2E (Playwright, mobile viewport) -> full rescue flow
+      Load (k6)                       -> 200 concurrent ingestions target (V1)
+
+23.2  GOLDEN DATASETS (B7 builds; at least)
+      - 10 syllabi (5 clean PDF, 3 phone photos, 2 messy)
+      - 20 PYQ papers across 3 subjects with human-labeled topic maps
+      - 15 note PDFs including scanned handwriting samples
+      - 50 quiz items with human-graded answers
+      - 30 seeded-error notes (wrong formula/date) to test the Verifier
+
+23.3  AGENT KPIs (gate in CI)
+      R2 text recall >= 95% clean / >= 85% photos
+      R3 topic mapping accuracy >= 85%; 0 fabricated PYQ
+      R6 faithfulness >= 95%
+      R10 grader agreement >= 90%; ambiguous MCQ rate < 3%
+      R11 error-type agreement >= 80%
+      R13 seeded-error catch rate >= 90%
+      All: invalid JSON < 1%, p95 latency within S05.4.
+
+23.4  CORE LOGIC TESTS (must exist)
+      - Triage: monotonic in time (more time never lowers S), deterministic,
+        respects coverage, handles UNREACHABLE.
+      - Planner: sleep intact, no overlaps, end >= 30 min before exam,
+        randomized property tests (1,000 cases).
+      - Replan: MUST never dropped unless UNREACHABLE; version increments.
+      - Scoring: recency weights, small-sample smoothing, PC bands.
+
+23.5  PREDICTOR CALIBRATION (post-launch)
+      Compare predicted vs actual (student-reported) results; recalibrate
+      p_appear weights (0.70/0.20/0.10) per university/board; publish
+      calibration curve internally. Until then, keep PC conservative.
+
+23.6  UX METRICS
+      Time to first plan < 3 min; plan-start rate >= 80%; block completion
+      >= 70%; panic-to-action < 60 s; "felt overwhelmed" <= 2/5; NPS >= 40;
+      self-reported "helped me pass/score better" tracked post-exam.
+
+================================================================================
+[S24] SECURITY, PRIVACY, ETHICS
+================================================================================
+
+24.1  DATA PROTECTION
+      - RLS everywhere; private storage buckets; signed URLs (24h).
+      - Encrypt in transit (TLS) and at rest (provider default).
+      - Minimal PII: name (optional), email, language, level. No location
+        stored; do not log document text or PII in application logs.
+      - User data controls: export, delete account, delete Twin, delete
+        uploads (hard delete within 30 days).
+      - Minors: many users are under 18. Show clear consent language; parental
+        consent flow where local law requires (verify per market); no
+        targeted ads; no selling data. Uploaded content is not used for model
+        training without explicit opt-in.
+
+24.2  ACADEMIC INTEGRITY
+      - Terms + UI copy: the cheat sheet is a revision aid, not for use in an
+        exam hall. We do not provide features designed to smuggle information
+        into exams, and we do not answer live-exam questions.
+      - If a user asks for help during a live exam (detected by time overlap
+        with exam window + wording), the Tutor declines politely and points to
+        the calm/strategy card instead.
+
+24.3  CONTENT AND COPYRIGHT
+      - Student-uploaded material is used only for that student's own study
+        outputs. Do not redistribute it or add it to a shared pool without
+        consent. Cheat sheet/notes paraphrase and condense; never reproduce
+        long verbatim copyrighted text.
+      - PYQ database contributions are opt-in, de-identified, and moderated.
+      - Resource discovery: allowlist first; respect robots/ToS; cite sources.
+
+24.4  AI SAFETY AND TRUST
+      - Verifier (R13) before showing generated facts; show Verified badges.
+      - Label AI-general content. Show confidence, never absolute claims.
+      - Prompt-injection defense: treat uploaded documents as DATA. Strip/ignore
+        instructions inside documents ("ignore previous instructions"); never
+        execute links or code from documents; system prompt is isolated.
+      - Rate limiting, abuse detection, upload scanning, file-type sniffing.
+
+24.5  WELLBEING
+      - Calm Coach (R14) rules: no medical/psychological diagnosis, no
+        toxic positivity. If distress signals (self-harm, hopelessness) appear:
+        pause study flow, respond with care, encourage reaching out to a
+        trusted person, and show region-appropriate helplines (maintain a
+        vetted, up-to-date list in config; verify numbers before shipping).
+      - Sleep protection is a product value, not just a feature.
+
+24.6  ACCESSIBILITY + FAIRNESS
+      - Low-bandwidth mode; regional languages; no assumptions about device.
+      - Predictor must not use protected attributes. Audit for bias by
+        board/university/language when calibrating.
+
+================================================================================
+[S25] HACKATHON SCHEDULE (ASSUMES 48 HOURS; SCALE PROPORTIONALLY)
+================================================================================
+
+  PHASE 0  (H0-H2)   ALIGN
+    B0: scaffold monorepo, CI, env, decision log. Team reads agent.md.
+    Freeze the MVP loop (S04.1) and the cut line (S04.4).
+
+  PHASE 1  (H2-H8)   CONTRACTS + FOUNDATIONS   (parallel)
+    B0/B1: schemas (Zod), migrations (S08), RLS, storage, auth.
+    B3:    scoring.ts + triage.ts + planner.ts skeletons with tests.
+    B6:    design tokens, Now/Next/Later component, plan summary card.
+    B4:    PDF text extraction + chunker + page citations.
+    >>> CONTRACT FREEZE at H8: schemas + API (S20).
+
+  PHASE 2  (H8-H20)  VERTICAL SLICE 1: "UPLOAD -> PLAN"
+    B4: OCR router, PYQ question chunking, embeddings.
+    B2: R2, R3, R1, R4, R5 wired via R0; SSE progress.
+    B3: finish triage + planner + validation + edge-case tests.
+    B5: intake wizard, upload UI, behavior check, diagnostic, plan screen.
+    MILESTONE H20: real PYQ PDF in -> Pass Core + valid plan out.
+
+  PHASE 3  (H20-H32) VERTICAL SLICE 2: "STUDY -> ADAPT"
+    B2: R6 notes, R13 verifier, R7 cheat sheet, R10 quizzes/grader, R11.
+    B5: notes reader, cheat sheet viewer, quiz runner, block runner.
+    B3: replan.ts, confidence meter math, Panic Mode logic.
+    B1: worker PDF export, block lifecycle endpoints.
+    MILESTONE H32: full loop for one student, with replan and PDF cheat sheet.
+
+  PHASE 4  (H32-H40) POLISH + DIFFERENTIATORS
+    B5/B6: Panic Mode UI, per-paragraph translate, offline PWA cache.
+    B2: R9 tutor, R12 twin update, R14 calm coach.
+    B8: demo seed (Anu vs Rahul), performance tuning, error copy.
+
+  PHASE 5  (H40-H46) HARDEN
+    B7: e2e on mobile viewport, eval gates, fix top 10 bugs.
+    B8: deploy, secrets, rate limits, fallback recorded demo, backups.
+
+  PHASE 6  (H46-H48) REHEARSE
+    Run the demo script (S26) 3 times end to end. Freeze code at H46.
+    Prepare Q&A answers (S26.4).
+
+  DAILY RHYTHM: 15-min sync at H8, H20, H32, H40. Each B-agent posts status:
+  done / next / blocked / needs-contract.
+
+================================================================================
+[S26] DEMO SCRIPT AND PITCH
+================================================================================
+
+26.1  THE 3-MINUTE DEMO (story: "Same exam. Different student. Different plan.")
+
+  0:00-0:20  HOOK
+    "Most students study the night before. Existing tools assume they have
+     weeks. We built for the real night-before." Show clock: 14 hours left.
+
+  0:20-1:10  STUDENT A - ANU (live upload)
+    Upload real PYQ PDF + syllabus. Show staged progress ("Reading 24 pages...
+    Finding topics... Checking 8 past papers..."). Meanwhile Anu answers the
+    8-question behavior check (focus 25 min, night type, weak numericals).
+    Show topics with evidence: "Appeared in 7 of 8 papers, avg 10 marks".
+
+  1:10-1:50  PASS CORE + PLAN
+    Pass Confidence 74% (range shown). "We'll cover 9 of 15 topics; here's why
+    we skip these 6." Show Now/Next/Later, sleep protected.
+
+  1:50-2:20  STUDENT B - RAHUL (pre-seeded, same exam)
+    Phone photos, examples-first learner, short focus span. Different Pass
+    Core order, shorter blocks, Malayalam paragraph translation on tap.
+    "Same goal. Different students. Different paths."
+
+  2:20-2:50  LIVE ADAPT + PANIC
+    Anu fails a recall quiz -> plan changes with a visible reason. Press Panic:
+    UI collapses to a single 5-minute task; confidence explained honestly.
+    Open the cheat sheet -> panic card + formulas -> Download PDF.
+
+  2:50-3:00  CLOSE
+    "SkillOS builds a learning twin of every student. Tonight it saves an
+     exam. Tomorrow it plans their whole career path."
+
+26.2  DEMO SAFETY NET
+      - Pre-run ingestion for the demo PDFs and cache results; also allow live
+        upload with the fallback of cached output if latency > 30 s.
+      - Recorded backup video. Seeded accounts. Offline test with airplane mode.
+
+26.3  JUDGE-FACING ARTIFACTS
+      - One-slide architecture (S05 diagram).
+      - One-slide "Pass Core" math (S12 formula, simple).
+      - One-slide honesty & ethics (S03.7, S24.2).
+      - Evidence: eval scores (S23.3), latency numbers (S05.4).
+
+26.4  LIKELY JUDGE QUESTIONS AND ANSWERS
+      Q: Is this just a chatbot?  A: No. Deterministic planner + PYQ analytics +
+         behavior-driven Twin + verification; the LLM is one component.
+      Q: Isn't cramming bad?  A: It is the real behavior. We make it safer:
+         protect sleep, triage to what matters, and steer users toward the
+         long-term path (Layer B) after their exam.
+      Q: Can you guarantee a pass?  A: No, and we say so. We maximize pass
+         probability and show an honest confidence range.
+      Q: Is the cheat sheet cheating?  A: It is a revision sheet to memorize
+         from, not for use in the exam hall; terms and UX say so.
+      Q: How do you avoid hallucinations?  A: RAG on the student's own material,
+         page citations, independent verifier agent, unverified labels.
+      Q: Business model?  A: Free Rescue (limited), paid: unlimited exams,
+         multi-exam, teacher/class packs, institution licenses.
+      Q: What if no PYQs?  A: Curriculum library + provisional syllabus, marked
+         unverified, confidence capped.
+
+================================================================================
+[S27] RISKS AND MITIGATIONS
+================================================================================
+
+  RISK                               MITIGATION
+  ---------------------------------  -----------------------------------------
+  OCR fails on phone photos          Vision-LLM fallback; retake prompts;
+                                     paste-text option
+  LLM hallucinated formulas          R13 verifier; grounded RAG; cheat sheet
+                                     only uses verified items
+  PYQ prediction wrong               Show as estimate + evidence; broad Pass
+                                     Core coverage; calibration loop (S23.5)
+  Student expects guaranteed pass    Honesty contract; conservative PC; copy
+  Latency too high on stage          Progressive delivery; cached demo; parallel
+                                     jobs; FAST model for extraction
+  Cost blow-up                       Token budgets; model tiers; caching by
+                                     content hash; chunk-limited RAG
+  Scope creep (Layer B)              Cut line (S04.4); Layer B gated behind
+                                     flagship completion
+  Planner produces bad schedule      Deterministic + validation + property tests
+  Privacy/minors concerns            Minimal data; consent; delete controls;
+                                     no training on uploads without opt-in
+  Prompt injection via PDFs          Treat docs as data; strip instructions;
+                                     isolated system prompts
+  Academic integrity backlash        Clear framing (S03.6, S24.2); no live-exam
+                                     help
+  Team integration hell              Contracts frozen at H8; B0 arbitration;
+                                     small PRs; runnable main
+  Offline complexity                 Cut line item M13 if time is short
+
+================================================================================
+[S28] ROADMAP
+================================================================================
+
+  NOW (hackathon)   Exam Eve Rescue MVP (S04.1)
+  +1 month          Multi-exam, resource discovery, community submissions,
+                    WhatsApp/Telegram reminders, voice read-aloud
+  +3 months         Full adaptive path + quest map, weekly revision digest,
+                    teacher packs, calibration by university
+  +6 months         Institution dashboards, code sandbox labs, handwritten-note
+                    OCR, regional-language UI, predictor v2 (learned weights)
+  Vision            "Learning Twin" follows the student from school to career;
+                    Rescue becomes the safety net, the adaptive path the habit.
+
+  HABIT LOOP (long-term retention strategy)
+  After the exam: "Want to never cram again? Try 10 minutes a day; here's
+  your Twin's suggested path." Convert last-day users into steady learners.
+
+================================================================================
+[S29] GLOSSARY
+================================================================================
+
+  Pass Core      Minimum set of topics/depths reaching pass mark + margin.
+  PYQ            Previous-year question paper(s).
+  Learning Twin  Continuously updated model of a student's knowledge, skills,
+                 speed, retention, behavior and preferences.
+  Depth L0-L3    Prereq micro / Survival / Solid / Deep coverage levels.
+  Density        Expected marks gained per minute studied (rho).
+  Pass Confidence Estimated probability of reaching the pass mark, with range.
+  Sigma          Uncertainty (percentage points) of predicted score.
+  Now/Next/Later Calm UI pattern showing only the current and next actions.
+  Panic Mode     Simplified flow that reduces the plan to one small next step.
+  RAG            Retrieval-augmented generation: answers grounded on retrieved
+                 chunks of the student's own documents.
+  Verified       Content that passed the Verifier (R13) against sources.
+  AI-general     Content not grounded in the student's documents; labeled.
+  R-series       Runtime agents inside the product (S15).
+  B-series       Build agents that construct the product (S16).
+  Cut line       Ordered list of features to drop first if time runs out (S04.4).
+
+################################################################################
+#  END OF project.txt                                                          #
+################################################################################
