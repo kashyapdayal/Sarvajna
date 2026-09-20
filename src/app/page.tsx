@@ -1209,7 +1209,7 @@ export default function App() {
 
             {/* 3. STUDY PATH (Gamified Fog-Concealed Adaptive Progression) */}
             {state.view === "path" && (
-              <section className="view active" id="view-path" style={{ padding: "12px 20px" }}>
+              <section className="view active" id="view-path" style={{ padding: "0" }}>
                 <GamifiedStudyPath
                   topicTitle={state.course}
                   onGainXP={handleGainXP}

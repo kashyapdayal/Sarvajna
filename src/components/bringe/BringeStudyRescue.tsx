@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { ambientAudio } from "@/components/common/SoundEffects";
 import { ParagraphSimplifier } from "@/components/common/ParagraphSimplifier";
+import { getStoredGraspingScore } from "@/lib/grasping-service";
 import {
   synthesizeCurriculum,
   evaluateStudentAnswer,
@@ -211,6 +212,23 @@ export const BringeStudyRescue: React.FC<BringeStudyRescueProps> = ({
   const [graspingIndex, setGraspingIndex] = useState<number>(68); // 0-100%
   const [consecutiveErrors, setConsecutiveErrors] = useState(0);
   const [fatigueAlertDismissed, setFatigueAlertDismissed] = useState(false);
+
+  // Floating AI Grasping & Dynamic Content Depth Telemetry (Fluctuating 1-10)
+  const [baseGraspingScore, setBaseGraspingScore] = useState<number>(() => getStoredGraspingScore());
+  const [fluctuationOffset, setFluctuationOffset] = useState<number>(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const wave = Math.sin(now / 3200) * 0.28;
+      const noise = ((now % 1000) / 1000 - 0.5) * 0.16;
+      setFluctuationOffset(Math.round((wave + noise) * 10) / 10);
+    }, 2800);
+    return () => clearInterval(timer);
+  }, []);
+
+  const liveGraspingOutOf10 = Math.max(1.2, Math.min(9.8, Math.round((baseGraspingScore + fluctuationOffset) * 10) / 10));
+  const liveContentDepthPercent = Math.round(liveGraspingOutOf10 * 10);
 
   // Night-of Micro-Spacing Queue
   const [reviewQueue, setReviewQueue] = useState<ScheduledReviewItem[]>([]);
@@ -1399,286 +1417,349 @@ export const BringeStudyRescue: React.FC<BringeStudyRescueProps> = ({
             </div>
           </div>
 
-          {/* 4 Stage 03 Command Suite Tabs */}
-          <div className="stage3-nav-tabs">
+          {/* 4 Stage 03 Command Suite Top Tiles */}
+          <div className="stage3-top-tiles-grid">
             <button
               type="button"
-              className={`stage3-nav-tab ${stage3Tab === "theory" ? "active" : ""}`}
+              className={`stage3-tile-card ${stage3Tab === "theory" ? "active" : ""}`}
               onClick={() => {
                 ambientAudio.playChime("click");
                 setStage3Tab("theory");
               }}
             >
-              <BookOpen size={17} />
-              <span>Theory</span>
+              <div className="stage3-tile-icon-wrap" style={{ color: "var(--accent-green)" }}>
+                <BookOpen size={22} />
+              </div>
+              <div className="stage3-tile-body">
+                <div className="stage3-tile-title-row">
+                  <span className="stage3-tile-title">Theory Vault</span>
+                  {stage3Tab === "theory" && <span className="stage3-tile-status-tag">Active</span>}
+                </div>
+                <span className="stage3-tile-sub">Deep proofs, derivations &amp; mental models</span>
+              </div>
             </button>
+
             <button
               type="button"
-              className={`stage3-nav-tab ${stage3Tab === "schedule" ? "active" : ""}`}
+              className={`stage3-tile-card ${stage3Tab === "schedule" ? "active" : ""}`}
               onClick={() => {
                 ambientAudio.playChime("click");
                 setStage3Tab("schedule");
               }}
             >
-              <Clock size={17} />
-              <span>Schedule &amp; Portions</span>
+              <div className="stage3-tile-icon-wrap" style={{ color: "#60a5fa" }}>
+                <Clock size={22} />
+              </div>
+              <div className="stage3-tile-body">
+                <div className="stage3-tile-title-row">
+                  <span className="stage3-tile-title">Schedule &amp; Portions</span>
+                  {stage3Tab === "schedule" && <span className="stage3-tile-status-tag">Active</span>}
+                </div>
+                <span className="stage3-tile-sub">{sleepHours}h sleep window &bull; {passMarkTarget}% threshold</span>
+              </div>
             </button>
+
             <button
               type="button"
-              className={`stage3-nav-tab ${stage3Tab === "resources" ? "active" : ""}`}
+              className={`stage3-tile-card ${stage3Tab === "resources" ? "active" : ""}`}
               onClick={() => {
                 ambientAudio.playChime("click");
                 setStage3Tab("resources");
               }}
             >
-              <Compass size={17} />
-              <span>Resources</span>
-              <span className="stage3-badge-counter">{curatedResources.length}</span>
+              <div className="stage3-tile-icon-wrap" style={{ color: "#f59e0b" }}>
+                <Compass size={22} />
+              </div>
+              <div className="stage3-tile-body">
+                <div className="stage3-tile-title-row">
+                  <span className="stage3-tile-title">Curated Resources</span>
+                  <span className="stage3-badge-counter">{curatedResources.length}</span>
+                </div>
+                <span className="stage3-tile-sub">Textbooks, MIT notes &amp; syllabus maps</span>
+              </div>
             </button>
+
             <button
               type="button"
-              className={`stage3-nav-tab ${stage3Tab === "practice" ? "active" : ""}`}
+              className={`stage3-tile-card ${stage3Tab === "practice" ? "active" : ""}`}
               onClick={() => {
                 ambientAudio.playChime("click");
                 setStage3Tab("practice");
               }}
             >
-              <Zap size={17} />
-              <span>Practice Lab</span>
+              <div className="stage3-tile-icon-wrap" style={{ color: "#a855f7" }}>
+                <Zap size={22} />
+              </div>
+              <div className="stage3-tile-body">
+                <div className="stage3-tile-title-row">
+                  <span className="stage3-tile-title">Practice Lab</span>
+                  {stage3Tab === "practice" && <span className="stage3-tile-status-tag">Active</span>}
+                </div>
+                <span className="stage3-tile-sub">MCQs, flashcards, written grading &amp; PYQs</span>
+              </div>
             </button>
           </div>
 
           {/* ================================================================= */}
-          {/* TAB 1: THEORY (Comprehensive Notes, Formulas, Traps & Simplifiers) */}
+          {/* TAB 1: THEORY (Expanded Workspace: Sidebar Chapters + Deep Content) */}
           {/* ================================================================= */}
           {stage3Tab === "theory" && (() => {
             const currentTheoryTopic = activeSelectedTopics[stage3TheoryIdx] || activeSelectedTopics[0];
+            if (!currentTheoryTopic) {
+              return (
+                <div style={{ textAlign: "center", padding: "60px 20px" }}>
+                  <p style={{ color: "var(--t2)", fontSize: "16px" }}>No syllabus portions selected.</p>
+                  <button
+                    type="button"
+                    className="bringe-primary-btn"
+                    style={{ marginTop: "14px" }}
+                    onClick={() => setShowPortionModal(true)}
+                  >
+                    Select Syllabus Portions
+                  </button>
+                </div>
+              );
+            }
+
             return (
-              <div>
-                {/* Topic Selector Pills */}
-                <div className="theory-topic-pills" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "20px" }}>
+              <div className="theory-expanded-workspace">
+                {/* Left Side: Chapter Navigation Sidebar */}
+                <aside className="theory-chapters-sidebar">
+                  <div className="theory-chapters-header">
+                    <span className="theory-chapters-title">Chapters ({activeSelectedTopics.length})</span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "999px" }}
+                      onClick={() => {
+                        ambientAudio.playChime("click");
+                        setShowPortionModal(true);
+                      }}
+                    >
+                      Portions
+                    </button>
+                  </div>
+
                   {activeSelectedTopics.map((top, idx) => (
                     <button
                       key={top.id}
                       type="button"
-                      className={`theory-topic-pill ${stage3TheoryIdx === idx ? "active" : ""}`}
+                      className={`theory-chapter-card ${stage3TheoryIdx === idx ? "active" : ""}`}
                       onClick={() => {
                         ambientAudio.playChime("click");
                         setStage3TheoryIdx(idx);
                       }}
                     >
-                      <span>0{idx + 1}. {top.name}</span>
+                      <div className="chapter-card-top">
+                        <span className="chapter-num-tag">Chapter 0{idx + 1}</span>
+                        <span className="topic-marks-tag" style={{ fontSize: "11px", padding: "2px 7px" }}>
+                          +{top.predictedMarks}m
+                        </span>
+                      </div>
+                      <h4 className="chapter-name">{top.name}</h4>
+                      <div className="chapter-meta-row">
+                        <span style={{ color: top.tier === "must_know" ? "var(--accent-green)" : "var(--t2)" }}>
+                          {top.tier === "must_know" ? "Must Know Core" : top.tier === "should_know" ? "Should Know" : "Skip"}
+                        </span>
+                        <span>&bull;</span>
+                        <span>{top.durationMins}m</span>
+                      </div>
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
+                </aside>
+
+                {/* Right Side: Expansive Academic Content Workspace */}
+                <main className="theory-content-workspace">
+                  {/* Active Chapter Header Banner */}
+                  <div
                     style={{
-                      fontSize: "12.5px",
-                      padding: "6px 14px",
-                      borderRadius: "999px",
-                      whiteSpace: "nowrap",
+                      background: "var(--surface2)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "12px",
+                      padding: "20px 26px",
                       display: "flex",
+                      justifyContent: "space-between",
                       alignItems: "center",
-                      gap: "6px",
-                    }}
-                    onClick={() => {
-                      ambientAudio.playChime("click");
-                      setShowPortionModal(true);
+                      flexWrap: "wrap",
+                      gap: "16px",
                     }}
                   >
-                    <SlidersHorizontal size={13} />
-                    <span>Change Portions</span>
-                  </button>
-                </div>
-
-                {/* Active Topic Header Info */}
-                <div
-                  style={{
-                    background: "var(--surface2)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "10px",
-                    padding: "18px 24px",
-                    marginBottom: "22px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: "14px",
-                  }}
-                >
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-                      <span className={`tier-badge ${currentTheoryTopic.tier === "must_know" ? "must-know" : currentTheoryTopic.tier === "should_know" ? "should-know" : "skip"}`}>
-                        {currentTheoryTopic.tier === "must_know" ? "Must Know Core" : currentTheoryTopic.tier === "should_know" ? "Should Know" : "Skip for Now"}
-                      </span>
-                      <span className="source-trust-tag">{currentTheoryTopic.sourceTag}</span>
-                      <span style={{ fontSize: "13px", color: "var(--t3)" }}>&bull; {currentTheoryTopic.pastExamFreq}</span>
-                    </div>
-                    <h3 style={{ fontFamily: "var(--serif)", fontSize: "24px", fontWeight: 500, margin: 0, color: "var(--text)" }}>
-                      {currentTheoryTopic.name}
-                    </h3>
-                    <p style={{ color: "var(--t2)", fontSize: "15px", margin: "5px 0 0" }}>
-                      {currentTheoryTopic.subtopic}
-                    </p>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                    <span className="topic-marks-tag" style={{ fontSize: "13.5px", padding: "6px 14px" }}>
-                      +{currentTheoryTopic.predictedMarks} Exam Marks
-                    </span>
-                    <button
-                      type="button"
-                      className="bringe-primary-btn"
-                      style={{ padding: "9px 18px", fontSize: "13.5px" }}
-                      onClick={() => {
-                        ambientAudio.playChime("click");
-                        setStage3PracticeTopicIdx(stage3TheoryIdx);
-                        setStage3Tab("practice");
-                      }}
-                    >
-                      <span>Jump to Practice Lab</span>
-                      <ArrowRight size={15} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Structured Horizontal 2-Column Layout */}
-                <div className="theory-horizontal-layout">
-                  {/* Primary Academic Column (~58% width) */}
-                  <div className="theory-col-primary">
-                    {/* Card 1: Core Theoretical Foundations with Paragraph Simplifier */}
-                    <div className="theory-card">
-                      <div className="theory-card-title">
-                        <Brain size={18} style={{ color: "var(--accent-green)" }} />
-                        <span>Academic Derivation &amp; In-Depth Theory</span>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+                        <span className="chapter-num-tag" style={{ color: "var(--accent-green)", fontSize: "12.5px" }}>
+                          Chapter 0{stage3TheoryIdx + 1}
+                        </span>
+                        <span className={`tier-badge ${currentTheoryTopic.tier === "must_know" ? "must-know" : currentTheoryTopic.tier === "should_know" ? "should-know" : "skip"}`}>
+                          {currentTheoryTopic.tier === "must_know" ? "Must Know Core" : currentTheoryTopic.tier === "should_know" ? "Should Know" : "Skip for Now"}
+                        </span>
+                        <span className="source-trust-tag">{currentTheoryTopic.sourceTag}</span>
+                        <span style={{ fontSize: "13px", color: "var(--t3)" }}>&bull; {currentTheoryTopic.pastExamFreq}</span>
                       </div>
-                      <div className="theory-prose" style={{ lineHeight: "1.75", marginBottom: "16px" }}>
-                        {currentTheoryTopic.collegeRigor}
-                      </div>
-                      <ParagraphSimplifier
-                        originalText={currentTheoryTopic.collegeRigor}
-                        topicName={currentTheoryTopic.name}
-                        alwaysShow={true}
-                      />
-                    </div>
-
-                    {/* Card 2: Cognitive Scaffold (Step-by-Step Model Derivation) with Paragraph Simplifier */}
-                    <div className="theory-card">
-                      <div className="theory-card-title">
-                        <BookOpen size={19} style={{ color: "#a855f7" }} />
-                        <span>Step-by-Step Model Derivation ({currentTheoryTopic.fadedExample.title})</span>
-                      </div>
-                      <div style={{ fontSize: "14.5px", color: "var(--t2)", marginBottom: "12px" }}>
-                        <b>Problem Formulation:</b> {currentTheoryTopic.fadedExample.step1_full.problem}
-                      </div>
-                      <div
-                        style={{
-                          background: "var(--surface2)",
-                          border: "1px solid var(--border)",
-                          borderRadius: "8px",
-                          padding: "16px 20px",
-                          fontSize: "14px",
-                          color: "var(--text)",
-                          lineHeight: "1.68",
-                          fontFamily: "var(--sans)",
-                          marginBottom: "12px",
-                        }}
-                      >
-                        <b>Annotated Derivation:</b><br />
-                        {currentTheoryTopic.fadedExample.step1_full.annotatedSolution}
-                      </div>
-                      <div style={{ marginBottom: "14px", fontSize: "13.5px", color: "var(--t3)" }}>
-                        <b>Key Examiner Insight:</b> {currentTheoryTopic.fadedExample.step1_full.keyInsight}
-                      </div>
-                      <ParagraphSimplifier
-                        originalText={currentTheoryTopic.fadedExample.step1_full.annotatedSolution}
-                        topicName={`${currentTheoryTopic.name} Derivation`}
-                        alwaysShow={true}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Secondary Tactical Column (~42% width) */}
-                  <div className="theory-col-secondary">
-                    {/* Card 3: Intuitive Analogy & Mental Model with Simplifier */}
-                    <div className="theory-card">
-                      <div className="theory-card-title">
-                        <Activity size={19} style={{ color: "#60a5fa" }} />
-                        <span>Intuitive Mental Model &amp; Analogy</span>
-                      </div>
-                      <div className="theory-prose" style={{ fontStyle: "italic", color: "var(--t2)", fontSize: "15px", marginBottom: "12px" }}>
-                        &ldquo;{currentTheoryTopic.highSchoolAnalogy}&rdquo;
-                      </div>
-                      <ParagraphSimplifier
-                        originalText={currentTheoryTopic.highSchoolAnalogy}
-                        topicName={`${currentTheoryTopic.name} Intuition`}
-                        alwaysShow={true}
-                      />
-                    </div>
-
-                    {/* Card 4: Operational Formulas & Boundary Limits */}
-                    <div className="theory-card">
-                      <div className="theory-card-title">
-                        <Layers size={19} style={{ color: "#f59e0b" }} />
-                        <span>Operational Formulas &amp; Boundary Conditions</span>
-                      </div>
-                      <div
-                        style={{
-                          fontFamily: "var(--mono)",
-                          fontSize: "14px",
-                          background: "var(--surface2)",
-                          border: "1px solid var(--border)",
-                          borderRadius: "8px",
-                          padding: "14px 18px",
-                          color: "var(--accent-green)",
-                          lineHeight: "1.65",
-                        }}
-                      >
-                        {currentTheoryTopic.formulaBoundary}
-                      </div>
-                    </div>
-
-                    {/* Card 5: Examiner Traps & Deduction Pitfalls */}
-                    <div
-                      className="theory-card"
-                      style={{
-                        borderColor: "rgba(239, 68, 68, 0.35)",
-                        background: "linear-gradient(180deg, rgba(239, 68, 68, 0.04) 0%, var(--surface) 100%)",
-                      }}
-                    >
-                      <div className="theory-card-title" style={{ color: "#f87171" }}>
-                        <ShieldAlert size={19} />
-                        <span>High-Yield Examiner Traps &amp; Deduction Pitfalls</span>
-                      </div>
-                      <p style={{ fontSize: "14.5px", color: "var(--text)", marginBottom: "12px", lineHeight: "1.6" }}>
-                        <b>Common Trap:</b> {currentTheoryTopic.commonGotcha}
+                      <h3 style={{ fontFamily: "var(--serif)", fontSize: "26px", fontWeight: 500, margin: 0, color: "var(--text)" }}>
+                        {currentTheoryTopic.name}
+                      </h3>
+                      <p style={{ color: "var(--t2)", fontSize: "15px", margin: "6px 0 0" }}>
+                        {currentTheoryTopic.subtopic}
                       </p>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                        {currentTheoryTopic.deductionTraps.map((trap, tIdx) => (
-                          <div key={tIdx} style={{ fontSize: "13.5px", color: "var(--t2)", display: "flex", gap: "8px" }}>
-                            <span style={{ color: "#ef4444", fontWeight: "bold" }}>&bull;</span>
-                            <span>{trap}</span>
-                          </div>
-                        ))}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <span className="topic-marks-tag" style={{ fontSize: "13.5px", padding: "6px 14px" }}>
+                        +{currentTheoryTopic.predictedMarks} Exam Marks
+                      </span>
+                      <button
+                        type="button"
+                        className="bringe-primary-btn"
+                        style={{ padding: "9px 18px", fontSize: "13.5px" }}
+                        onClick={() => {
+                          ambientAudio.playChime("click");
+                          setStage3PracticeTopicIdx(stage3TheoryIdx);
+                          setStage3Tab("practice");
+                        }}
+                      >
+                        <span>Jump to Practice Lab</span>
+                        <ArrowRight size={15} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Horizontal 2-Column Content Layout */}
+                  <div className="theory-horizontal-layout">
+                    {/* Primary Column */}
+                    <div className="theory-col-primary">
+                      {/* Card 1: Core Theoretical Foundations with Paragraph Simplifier */}
+                      <div className="theory-card">
+                        <div className="theory-card-title">
+                          <Brain size={19} style={{ color: "var(--accent-green)" }} />
+                          <span>Academic Derivation &amp; In-Depth Theory</span>
+                        </div>
+                        <div className="theory-prose" style={{ lineHeight: "1.75", marginBottom: "16px" }}>
+                          {currentTheoryTopic.collegeRigor}
+                        </div>
+                        <ParagraphSimplifier
+                          originalText={currentTheoryTopic.collegeRigor}
+                          topicName={currentTheoryTopic.name}
+                          alwaysShow={true}
+                        />
+                      </div>
+
+                      {/* Card 2: Cognitive Scaffold (Step-by-Step Model Derivation) with Paragraph Simplifier */}
+                      <div className="theory-card">
+                        <div className="theory-card-title">
+                          <BookOpen size={19} style={{ color: "#a855f7" }} />
+                          <span>Step-by-Step Model Derivation ({currentTheoryTopic.fadedExample.title})</span>
+                        </div>
+                        <div style={{ fontSize: "14.5px", color: "var(--t2)", marginBottom: "12px" }}>
+                          <b>Problem Formulation:</b> {currentTheoryTopic.fadedExample.step1_full.problem}
+                        </div>
+                        <div
+                          style={{
+                            background: "var(--surface2)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "8px",
+                            padding: "16px 20px",
+                            fontSize: "14px",
+                            color: "var(--text)",
+                            lineHeight: "1.68",
+                            fontFamily: "var(--sans)",
+                            marginBottom: "12px",
+                          }}
+                        >
+                          <b>Annotated Derivation:</b><br />
+                          {currentTheoryTopic.fadedExample.step1_full.annotatedSolution}
+                        </div>
+                        <div style={{ marginBottom: "14px", fontSize: "13.5px", color: "var(--t3)" }}>
+                          <b>Key Examiner Insight:</b> {currentTheoryTopic.fadedExample.step1_full.keyInsight}
+                        </div>
+                        <ParagraphSimplifier
+                          originalText={currentTheoryTopic.fadedExample.step1_full.annotatedSolution}
+                          topicName={`${currentTheoryTopic.name} Derivation`}
+                          alwaysShow={true}
+                        />
                       </div>
                     </div>
 
-                    {/* Card 6: Key Examination Concepts & Definitions */}
-                    <div className="theory-card">
-                      <div className="theory-card-title">
-                        <CheckCircle2 size={19} style={{ color: "#22c55e" }} />
-                        <span>Key Examination Concepts &amp; Definitions</span>
+                    {/* Secondary Column */}
+                    <div className="theory-col-secondary">
+                      {/* Card 3: Intuitive Mental Model & Analogy */}
+                      <div className="theory-card">
+                        <div className="theory-card-title">
+                          <Activity size={19} style={{ color: "#60a5fa" }} />
+                          <span>Intuitive Mental Model &amp; Analogy</span>
+                        </div>
+                        <div className="theory-prose" style={{ fontStyle: "italic", color: "var(--t2)", fontSize: "15px", marginBottom: "12px" }}>
+                          &ldquo;{currentTheoryTopic.highSchoolAnalogy}&rdquo;
+                        </div>
+                        <ParagraphSimplifier
+                          originalText={currentTheoryTopic.highSchoolAnalogy}
+                          topicName={`${currentTheoryTopic.name} Intuition`}
+                          alwaysShow={true}
+                        />
                       </div>
-                      <ul style={{ paddingLeft: "20px", margin: "0", display: "flex", flexDirection: "column", gap: "8px" }}>
-                        {currentTheoryTopic.keyPoints.map((point, pIdx) => (
-                          <li key={pIdx} style={{ fontSize: "14px", color: "var(--text)", lineHeight: "1.6" }}>
-                            {point}
-                          </li>
-                        ))}
-                      </ul>
+
+                      {/* Card 4: Operational Formulas & Boundary Limits */}
+                      <div className="theory-card">
+                        <div className="theory-card-title">
+                          <Layers size={19} style={{ color: "#f59e0b" }} />
+                          <span>Operational Formulas &amp; Boundary Conditions</span>
+                        </div>
+                        <div
+                          style={{
+                            fontFamily: "var(--mono)",
+                            fontSize: "14px",
+                            background: "var(--surface2)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "8px",
+                            padding: "14px 18px",
+                            color: "var(--accent-green)",
+                            lineHeight: "1.65",
+                          }}
+                        >
+                          {currentTheoryTopic.formulaBoundary}
+                        </div>
+                      </div>
+
+                      {/* Card 5: Examiner Traps & Deduction Pitfalls */}
+                      <div
+                        className="theory-card"
+                        style={{
+                          borderColor: "rgba(239, 68, 68, 0.35)",
+                          background: "linear-gradient(180deg, rgba(239, 68, 68, 0.04) 0%, var(--surface) 100%)",
+                        }}
+                      >
+                        <div className="theory-card-title" style={{ color: "#f87171" }}>
+                          <ShieldAlert size={19} />
+                          <span>High-Yield Examiner Traps &amp; Deduction Pitfalls</span>
+                        </div>
+                        <p style={{ fontSize: "14.5px", color: "var(--text)", marginBottom: "12px", lineHeight: "1.6" }}>
+                          <b>Common Trap:</b> {currentTheoryTopic.commonGotcha}
+                        </p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                          {currentTheoryTopic.deductionTraps.map((trap, tIdx) => (
+                            <div key={tIdx} style={{ fontSize: "13.5px", color: "var(--t2)", display: "flex", gap: "8px" }}>
+                              <span style={{ color: "#ef4444", fontWeight: "bold" }}>&bull;</span>
+                              <span>{trap}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Card 6: Key Examination Concepts & Definitions */}
+                      <div className="theory-card">
+                        <div className="theory-card-title">
+                          <CheckCircle2 size={19} style={{ color: "#22c55e" }} />
+                          <span>Key Examination Concepts &amp; Definitions</span>
+                        </div>
+                        <ul style={{ paddingLeft: "20px", margin: "0", display: "flex", flexDirection: "column", gap: "8px" }}>
+                          {currentTheoryTopic.keyPoints.map((point, pIdx) => (
+                            <li key={pIdx} style={{ fontSize: "14px", color: "var(--text)", lineHeight: "1.6" }}>
+                              {point}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </main>
               </div>
             );
           })()}
@@ -2592,6 +2673,39 @@ export const BringeStudyRescue: React.FC<BringeStudyRescueProps> = ({
             >
               Lock Schedule &amp; Enter Active Retrieval Loop &rarr;
             </button>
+          </div>
+
+          {/* Floating AI Grasping & Dynamic Content Depth Telemetry Gauge (Bottom Right) */}
+          <div className="floating-grasping-gauge">
+            <div className="gauge-circle-wrap">
+              <svg className="gauge-svg" width="52" height="52" viewBox="0 0 52 52">
+                <circle className="gauge-bg-circle" cx="26" cy="26" r="21" />
+                <circle
+                  className="gauge-progress-circle"
+                  cx="26"
+                  cy="26"
+                  r="21"
+                  style={{
+                    strokeDasharray: `${2 * Math.PI * 21}`,
+                    strokeDashoffset: `${2 * Math.PI * 21 * (1 - liveGraspingOutOf10 / 10)}`,
+                  }}
+                />
+              </svg>
+              <div className="gauge-center-val">
+                <span className="gauge-val-num">{liveGraspingOutOf10.toFixed(1)}</span>
+                <span className="gauge-val-denom">/10</span>
+              </div>
+            </div>
+            <div className="gauge-info-col">
+              <div className="gauge-info-tag">
+                <span className="gauge-pulse-dot" />
+                <span>AI Depth Tuner</span>
+              </div>
+              <div className="gauge-status-label">
+                Grasping: <b>{liveGraspingOutOf10 >= 7.5 ? "Honors Rigor" : liveGraspingOutOf10 >= 5.0 ? "Applied Standard" : "Intuition Mode"}</b>
+              </div>
+              <div className="gauge-depth-sub">Tuning content depth to {liveContentDepthPercent}%</div>
+            </div>
           </div>
         </div>
       )}
