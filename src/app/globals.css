@@ -2791,124 +2791,119 @@ button.dwrow:hover {
   min-width: 0;
 }
 
-/* ============ FLOATING AI GRASPING GAUGE (BOTTOM RIGHT) ============ */
+/* ---------- Floating Grasping Gauge (compact) ---------- */
 .floating-grasping-gauge {
   position: fixed;
-  bottom: 24px;
-  right: 28px;
+  bottom: 20px;
+  right: 20px;
   z-index: 999;
-  background: var(--surface);
-  border: 1px solid var(--border-2);
-  border-radius: 50px;
-  padding: 8px 20px 8px 10px;
   display: flex;
-  align-items: center;
-  gap: 14px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(12px);
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
   user-select: none;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  animation: floatUp 0.3s ease-out;
 }
 
-.floating-grasping-gauge:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.55);
-}
-
-.gauge-circle-wrap {
+.gauge-circle-btn {
   position: relative;
-  width: 52px;
-  height: 52px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: var(--bg-card, #1a1a2e);
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.gauge-circle-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+}
+.gauge-circle-btn:focus-visible {
+  outline: 2px solid var(--color-primary, #6366f1);
+  outline-offset: 2px;
 }
 
 .gauge-svg {
+  width: 36px;
+  height: 36px;
   transform: rotate(-90deg);
-  width: 52px;
-  height: 52px;
-}
-
-.gauge-bg-circle {
-  fill: transparent;
-  stroke: var(--surface2);
-  stroke-width: 4;
-}
-
-.gauge-progress-circle {
-  fill: transparent;
-  stroke: var(--accent-green);
-  stroke-width: 4;
-  stroke-linecap: round;
-  transition: stroke-dashoffset 0.8s ease, stroke 0.3s ease;
 }
 
 .gauge-center-val {
   position: absolute;
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-}
-
-.gauge-val-num {
-  font-size: 14px;
-  font-weight: 700;
-  font-family: var(--mono);
-  color: var(--text);
-}
-
-.gauge-val-denom {
-  font-size: 10px;
-  font-family: var(--mono);
-  color: var(--t3);
-}
-
-.gauge-info-col {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.gauge-info-tag {
+  inset: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-primary, #e0e0e0);
+  letter-spacing: -0.3px;
+  pointer-events: none;
+}
+
+/* popover */
+.gauge-popover {
+  background: var(--bg-card, #1a1a2e);
+  border: 1px solid var(--border-muted, #333);
+  border-radius: 10px;
+  padding: 8px 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-  font-size: 10.5px;
-  font-family: var(--mono);
+  min-width: 120px;
+}
+.gauge-popover-title {
+  font-size: 10px;
   font-weight: 600;
+  color: var(--text-secondary, #888);
   text-transform: uppercase;
-  color: var(--t3);
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
 }
-
-.gauge-pulse-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent-green);
-  box-shadow: 0 0 8px var(--accent-green);
-  animation: pulse 1.8s infinite;
+.gauge-mode-btns {
+  display: flex;
+  gap: 4px;
 }
-
-.gauge-status-label {
-  font-size: 13px;
+.gauge-mode-btn {
+  flex: 1;
+  padding: 4px 0;
+  font-size: 10px;
   font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
+  border: 1px solid var(--border-muted, #444);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.gauge-mode-btn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  color: var(--text-primary, #e0e0e0);
+}
+.gauge-mode-btn.active {
+  background: var(--color-primary, #6366f1);
+  border-color: var(--color-primary, #6366f1);
+  color: #fff;
 }
 
-.gauge-depth-sub {
-  font-size: 11.5px;
-  color: var(--t2);
-  white-space: nowrap;
+/* light theme */
+[data-theme="light"] .gauge-circle-btn {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+[data-theme="light"] .gauge-popover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: var(--border-muted, #d0d0d0);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
-[data-theme="light"] .floating-grasping-gauge {
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
-}
 
 /* ============ STAGE 03 LEGACY FOUR-TAB COMMAND SUITE ============ */
 .stage3-nav-tabs {

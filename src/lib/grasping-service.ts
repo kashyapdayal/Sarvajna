@@ -27,6 +27,9 @@ export const SUPPORTED_LANGUAGES = [
 const STORAGE_KEY_GRASPING = "sarvajna_grasping_telemetry";
 const STORAGE_KEY_LANG = "sarvajna_simplify_lang";
 const STORAGE_KEY_THEME = "sarvajna_theme";
+const CONTENT_DEPTH_MODE_KEY = "sarvajna_content_depth_mode";
+
+export type ContentDepthMode = "auto" | "low" | "medium" | "high";
 
 export function getStoredGraspingScore(): number {
   if (typeof window === "undefined") return 4.8;
@@ -258,3 +261,39 @@ export function simplifyParagraphText(originalText: string, lang = "en_eli5", to
   // Fallback simplified intuition
   return `Intuitive Simplification: Think of this mechanism like a real-world sorting system where each rule prevents accidents, reduces duplicate work, and makes sure nothing is lost even if there is heavy traffic.`;
 }
+
+/* ================================================================
+   Content Depth Mode -- user-selectable depth control
+   Maps: low=3.0, medium=5.5, high=8.5, auto=from EWMA score
+   ================================================================ */
+
+export function getStoredContentDepthMode(): ContentDepthMode {
+  if (typeof window === "undefined") return "auto";
+  const raw = localStorage.getItem(CONTENT_DEPTH_MODE_KEY);
+  if (raw === "low" || raw === "medium" || raw === "high" || raw === "auto") return raw;
+  return "auto";
+}
+
+export function setStoredContentDepthMode(mode: ContentDepthMode): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(CONTENT_DEPTH_MODE_KEY, mode);
+}
+
+/**
+ * Returns the effective 0-10 depth score based on the user's chosen mode.
+ * - auto: returns the EWMA grasping score from telemetry
+ * - low: always 3.0
+ * - medium: always 5.5
+ * - high: always 8.5
+ */
+export function getEffectiveDepthScore(mode?: ContentDepthMode): number {
+  const m = mode ?? getStoredContentDepthMode();
+  switch (m) {
+    case "low":    return 3.0;
+    case "medium": return 5.5;
+    case "high":   return 8.5;
+    case "auto":
+    default:       return getStoredGraspingScore();
+  }
+}
+
